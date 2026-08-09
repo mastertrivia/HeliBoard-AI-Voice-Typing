@@ -12,3 +12,6 @@
 # after upgrading to gradle 8, stack traces contain "unknown source"
 -keepattributes SourceFile,LineNumberTable
 -dontobfuscate
+
+# Compile-time-only annotations referenced by transitive dependencies (e.g. Google Tink)
+-dontwarn com.google.errorprone.annotations.**
