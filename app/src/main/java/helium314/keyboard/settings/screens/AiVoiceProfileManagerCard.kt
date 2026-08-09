@@ -277,6 +277,8 @@ private fun AiVoiceProfilesPage(
         confirmButtonText = stringResource(R.string.ai_voice_remove),
     )
     error?.let { message -> InfoDialog(message) { error = null } }
+    }
+    }
 }
 
 @Composable
