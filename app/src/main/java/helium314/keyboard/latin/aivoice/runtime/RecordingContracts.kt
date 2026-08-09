@@ -9,7 +9,7 @@ data class AudioFrame(val bytes: ByteArray, val capturedAtElapsedRealtime: Long)
 data class AudioChunk(val sequence: Long, val wavFile: File, val durationMillis: Long)
 
 /** Thread-safe session token that immediately invalidates insertion after editor/IME loss. */
-internal class SessionInsertionGate {
+class SessionInsertionGate {
     @Volatile private var valid = true
     fun invalidate() { valid = false }
     fun allowsInsertion(): Boolean = valid

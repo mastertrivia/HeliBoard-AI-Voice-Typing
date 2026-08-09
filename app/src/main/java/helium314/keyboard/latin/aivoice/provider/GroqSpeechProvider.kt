@@ -20,7 +20,7 @@ import okhttp3.Response
 import okhttp3.RequestBody.Companion.asRequestBody
 import java.io.IOException
 import java.net.ConnectException
-import java.net.InterruptedIOException
+import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.time.ZonedDateTime
@@ -52,7 +52,7 @@ class GroqSpeechProvider(
                         providerError = parseErrorBody(it),
                         exceptionStage = "provider_http",
                     )
-                    return parseResponse(it, request)
+                    return@withContext parseResponse(it, request)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -81,6 +81,7 @@ class GroqSpeechProvider(
                 throw ProviderException(failure, exceptionStage = classifyIoStage(exception), retried = attempt > 0)
             }
         }
+        error("unreachable")
     }
 
     private fun validateRequest(request: TranscriptionRequest) {
@@ -119,7 +120,8 @@ class GroqSpeechProvider(
     }
 
     private fun readResponseBody(response: Response): String {
-        val reader = response.body.charStream()
+        val body = response.body ?: throw ProviderException(ProviderFailure.MalformedResponse, exceptionStage = "response_parser")
+        val reader = body.charStream()
         val output = StringBuilder()
         val buffer = CharArray(RESPONSE_READ_BUFFER_CHARS)
         while (true) {
@@ -139,7 +141,7 @@ class GroqSpeechProvider(
             }
             override fun onResponse(call: Call, response: Response) {
                 if (continuation.isActive) {
-                    continuation.resume(response) { _, value, _ -> value.close() }
+                    continuation.resume(response) { _ -> response.close() }
                 } else response.close()
             }
         })
@@ -163,7 +165,8 @@ class GroqSpeechProvider(
     }
 
     private fun readErrorBody(response: Response): String {
-        val reader = response.body.charStream()
+        val body = response.body ?: throw ProviderException(ProviderFailure.MalformedResponse, exceptionStage = "response_parser")
+        val reader = body.charStream()
         val output = StringBuilder()
         val buffer = CharArray(RESPONSE_READ_BUFFER_CHARS)
         while (true) {

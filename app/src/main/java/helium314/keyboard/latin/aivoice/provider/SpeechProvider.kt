@@ -82,11 +82,11 @@ class ProviderResolver(
      */
     fun validate(profile: ApiProfile): ProviderProfileResolution {
         if (!catalog.supports(profile.providerId, profile.modelId)) {
-            emitSafely(AiDiagnosticEvent(DiagnosticLevel.ERROR, "AI-0505", profileSerial = profile.serialNumber, providerId = profile.providerId, modelId = profile.modelId, message = "Unsupported provider or model"))
+            emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.ERROR, code = "AI-0505", profileSerial = profile.serialNumber, providerId = profile.providerId, modelId = profile.modelId, message = "Unsupported provider or model"))
             return ProviderProfileResolution.InvalidProfile
         }
         if (registry.provider(profile.providerId) == null) {
-            emitSafely(AiDiagnosticEvent(DiagnosticLevel.ERROR, "AI-0505", profileSerial = profile.serialNumber, providerId = profile.providerId, modelId = profile.modelId, message = "Provider is not installed"))
+            emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.ERROR, code = "AI-0505", profileSerial = profile.serialNumber, providerId = profile.providerId, modelId = profile.modelId, message = "Provider is not installed"))
             return ProviderProfileResolution.ProviderUnavailable
         }
         return ProviderProfileResolution.Ready
@@ -105,11 +105,11 @@ class ProviderResolver(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            emitSafely(AiDiagnosticEvent(DiagnosticLevel.WARNING, "AI-0503", profileSerial = profile.serialNumber, providerId = profile.providerId, modelId = profile.modelId, message = "API key could not be read"))
+            emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.WARNING, code = "AI-0503", profileSerial = profile.serialNumber, providerId = profile.providerId, modelId = profile.modelId, message = "API key could not be read"))
             return false
         }
         if (key.isNullOrBlank()) {
-            emitSafely(AiDiagnosticEvent(DiagnosticLevel.WARNING, "AI-0503", profileSerial = profile.serialNumber, providerId = profile.providerId, modelId = profile.modelId, message = "API key is missing"))
+            emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.WARNING, code = "AI-0503", profileSerial = profile.serialNumber, providerId = profile.providerId, modelId = profile.modelId, message = "API key is missing"))
             return false
         }
         return true
@@ -130,7 +130,7 @@ class ProviderResolver(
         }
         // This is deliberately the last operation before handing the ephemeral key to the provider.
         val key = keyStore.read(profile.id)?.takeIf { it.isNotBlank() } ?: run {
-            emitSafely(AiDiagnosticEvent(DiagnosticLevel.WARNING, "AI-0503", profileSerial = profile.serialNumber, providerId = profile.providerId, modelId = profile.modelId, message = "API key is missing"))
+            emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.WARNING, code = "AI-0503", profileSerial = profile.serialNumber, providerId = profile.providerId, modelId = profile.modelId, message = "API key is missing"))
             return ProviderResolution.MissingApiKey
         }
         return ProviderResolution.Ready(ResolvedProvider(provider, key))

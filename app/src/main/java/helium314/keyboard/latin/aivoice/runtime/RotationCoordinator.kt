@@ -79,7 +79,7 @@ class DefaultRotationCoordinator(
                 active == null || !eligible(active, usableProfileIds) -> {
                     result = firstEligible(config, usableProfileIds)
                     if (result == null) {
-                        emitSafely(AiDiagnosticEvent(DiagnosticLevel.ERROR, "AI-0703", message = "No eligible AI Voice profile is available", reason = "cause=no enabled, supported, installed profile"))
+                        emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.ERROR, code = "AI-0703", message = "No eligible AI Voice profile is available", reason = "cause=no enabled, supported, installed profile"))
                         config
                     } else {
                         config.copy(activeProfileId = result!!.id,
@@ -95,35 +95,37 @@ class DefaultRotationCoordinator(
         throw cancelled
     } catch (_: Exception) {
         // Rotation is optional. Preserve the last durable active profile so the core pipeline can continue.
-        emitSafely(AiDiagnosticEvent(DiagnosticLevel.ERROR, "AI-0708", message = "Rotation decision failed; current profile retained"))
+        emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.ERROR, code = "AI-0708", message = "Rotation decision failed; current profile retained"))
         val active = repository.config.value.activeProfileId
             ?.let { id -> repository.config.value.profiles.firstOrNull { it.id == id } }
         if (active != null && active.enabled && isProfileUsable(active)) active else null
     }
 
-    override suspend fun recordActiveDuration(profileId: String, activeMillis: Long) = try {
-        mutex.withLock {
-        if (activeMillis <= 0L) return@withLock
-        repository.update("record_profile_usage") { config ->
-            if (config.profiles.none { it.id == profileId }) return@update config
-            config.copy(
-                profiles = config.profiles.map { profile -> if (profile.id == profileId) profile.copy(
-                    accumulatedRecordingMillis = profile.accumulatedRecordingMillis + activeMillis,
-                ) else profile },
-                rotation = config.rotation.copy(usageCycleRecordingMillis = config.rotation.usageCycleRecordingMillis + activeMillis),
-            )
+    override suspend fun recordActiveDuration(profileId: String, activeMillis: Long) {
+        try {
+            mutex.withLock {
+            if (activeMillis <= 0L) return@withLock
+            repository.update("record_profile_usage") { config ->
+                if (config.profiles.none { it.id == profileId }) return@update config
+                config.copy(
+                    profiles = config.profiles.map { profile -> if (profile.id == profileId) profile.copy(
+                        accumulatedRecordingMillis = profile.accumulatedRecordingMillis + activeMillis,
+                    ) else profile },
+                    rotation = config.rotation.copy(usageCycleRecordingMillis = config.rotation.usageCycleRecordingMillis + activeMillis),
+                )
+            }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.WARNING, code = "AI-0708", message = "Usage rotation accounting failed"))
         }
-        }
-    } catch (cancelled: CancellationException) {
-        throw cancelled
-    } catch (_: Exception) {
-        emitSafely(AiDiagnosticEvent(DiagnosticLevel.WARNING, "AI-0708", message = "Usage rotation accounting failed"))
     }
 
     override suspend fun requestFailureRotation(profileId: String, failure: ProviderFailure): Boolean = try {
         mutex.withLock {
         if (!failure.isRotationEligible()) {
-            emitSafely(AiDiagnosticEvent(DiagnosticLevel.INFO, "AI-0709", message = "Provider failure does not qualify for profile rotation"))
+            emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.INFO, code = "AI-0709", message = "Provider failure does not qualify for profile rotation"))
             return@withLock false
         }
         var queued = false
@@ -154,7 +156,7 @@ class DefaultRotationCoordinator(
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (_: Exception) {
-        emitSafely(AiDiagnosticEvent(DiagnosticLevel.WARNING, "AI-0708", message = "Failure rotation request was ignored"))
+        emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.WARNING, code = "AI-0708", message = "Failure rotation request was ignored"))
         false
     }
 
@@ -181,7 +183,7 @@ class DefaultRotationCoordinator(
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (_: Exception) {
-        emitSafely(AiDiagnosticEvent(DiagnosticLevel.WARNING, "AI-0708", message = "Failover candidate resolution failed"))
+        emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.WARNING, code = "AI-0708", message = "Failover candidate resolution failed"))
         emptyList()
     }
 
@@ -202,7 +204,7 @@ class DefaultRotationCoordinator(
             // selection superseded it). It may only disable that profile; it must never rotate
             // or disable the newly selected active profile.
             val retained = (anchoredConfig.rotation.pendingTriggers + due) - RotationTrigger.FAILURE
-            (due - RotationTrigger.FAILURE).forEach { emitSafely(AiDiagnosticEvent(DiagnosticLevel.INFO, "AI-0706", profileSerial = active.serialNumber, message = "Rotation trigger deferred by safe-boundary arbitration: $it")) }
+            (due - RotationTrigger.FAILURE).forEach { emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.INFO, code = "AI-0706", profileSerial = active.serialNumber, message = "Rotation trigger deferred by safe-boundary arbitration: $it")) }
             if (config.rotation.disableFailedProfile) {
                 config.profiles.firstOrNull { it.id == failedProfileId }?.let { emitProfileDisabled(it, pendingFailureTypes.remove(failedProfileId)) }
             }
@@ -215,11 +217,11 @@ class DefaultRotationCoordinator(
         }
         val next = nextEligible(config, active, usableProfileIds)
         if (next == null) {
-            emitSafely(AiDiagnosticEvent(DiagnosticLevel.WARNING, "AI-0703", profileSerial = active.serialNumber, message = "Rotation is due but no alternate eligible profile exists", reason = "cause=no alternate enabled, supported, installed profile"))
+            emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.WARNING, code = "AI-0703", profileSerial = active.serialNumber, message = "Rotation is due but no alternate eligible profile exists", reason = "cause=no alternate enabled, supported, installed profile"))
             return anchoredConfig.copy(rotation = anchoredConfig.rotation.copy(pendingTriggers = anchoredConfig.rotation.pendingTriggers + due)) to active
         }
         val retained = (anchoredConfig.rotation.pendingTriggers + due) - winner
-        (due - winner).forEach { emitSafely(AiDiagnosticEvent(DiagnosticLevel.INFO, "AI-0706", profileSerial = active.serialNumber, message = "Rotation trigger deferred by safe-boundary arbitration: $it")) }
+        (due - winner).forEach { emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.INFO, code = "AI-0706", profileSerial = active.serialNumber, message = "Rotation trigger deferred by safe-boundary arbitration: $it")) }
         val disabledFrom = winner == RotationTrigger.FAILURE && config.rotation.disableFailedProfile
         if (disabledFrom) emitProfileDisabled(active, pendingFailureTypes.remove(active.id))
         diagnostics.info("AI-0707", next, "Profile rotated for $winner at session boundary",
@@ -289,7 +291,7 @@ class DefaultRotationCoordinator(
     }
     private fun emitProfileDisabled(profile: ApiProfile, failureType: String?) {
         emitSafely(AiDiagnosticEvent(
-            DiagnosticLevel.ERROR, "AI-0710",
+            level = DiagnosticLevel.ERROR, code = "AI-0710",
             profileSerial = profile.serialNumber, providerId = profile.providerId, modelId = profile.modelId,
             message = "Failed profile disabled",
             reason = buildString {
@@ -299,8 +301,10 @@ class DefaultRotationCoordinator(
             },
         ))
     }
-    private fun AiDiagnosticsSink.info(code: String, profile: ApiProfile, message: String, reason: String? = null) = emitSafely(AiDiagnosticEvent(DiagnosticLevel.INFO, code, profileSerial = profile.serialNumber, providerId = profile.providerId, modelId = profile.modelId, message = message, reason = reason))
-    private fun emitSafely(event: AiDiagnosticEvent) = runCatching { diagnostics.emit(event) }
+    private fun AiDiagnosticsSink.info(code: String, profile: ApiProfile, message: String, reason: String? = null) = emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.INFO, code = code, profileSerial = profile.serialNumber, providerId = profile.providerId, modelId = profile.modelId, message = message, reason = reason))
+    private fun emitSafely(event: AiDiagnosticEvent) {
+        runCatching { diagnostics.emit(event) }
+    }
 
     private companion object {
         const val MILLIS_PER_DAY = 24L * 60L * 60L * 1000L

@@ -79,34 +79,36 @@ class RecordingSession(
     /** Called synchronously by the IME when the old editor is no longer valid. */
     fun invalidateEditor() = insertionGate.invalidate()
 
-    private suspend fun close(graceful: Boolean) = closeMutex.withLock {
-        if (closed) return
-        closed = true
-        if (!graceful) insertionGate.invalidate()
-        try {
-            // A broken recorder must not prevent queued work/files from being cancelled and closed.
-            runCatching { recorder.stop() }
-            runCatching { timeoutJob?.cancelAndJoin() }
-            runCatching { captureJob?.cancelAndJoin() }
-            if (graceful) {
-                runCatching { assembler.flushFinal() }.getOrNull()?.let { chunk ->
-                    runCatching { dispatcher.enqueue(chunk) }
+    private suspend fun close(graceful: Boolean) {
+        closeMutex.withLock {
+            if (closed) return@withLock
+            closed = true
+            if (!graceful) insertionGate.invalidate()
+            try {
+                // A broken recorder must not prevent queued work/files from being cancelled and closed.
+                runCatching { recorder.stop() }
+                runCatching { timeoutJob?.cancelAndJoin() }
+                runCatching { captureJob?.cancelAndJoin() }
+                if (graceful) {
+                    runCatching { assembler.flushFinal() }.getOrNull()?.let { chunk ->
+                        runCatching { dispatcher.enqueue(chunk) }
+                    }
+                    val drained = runCatching {
+                        withTimeoutOrNull(FINAL_DRAIN_TIMEOUT_MILLIS) { dispatcher.drain() }
+                    }.getOrNull()
+                    if (drained == null) runCatching { dispatcher.cancelPending() }
+                } else {
+                    runCatching { dispatcher.cancelPending() }
+                    runCatching { assembler.discard() }
                 }
-                val drained = runCatching {
-                    withTimeoutOrNull(FINAL_DRAIN_TIMEOUT_MILLIS) { dispatcher.drain() }
-                }.getOrNull()
-                if (drained == null) runCatching { dispatcher.cancelPending() }
-            } else {
+            } catch (_: Exception) {
                 runCatching { dispatcher.cancelPending() }
                 runCatching { assembler.discard() }
+            } finally {
+                runCatching { recorder.close() }
+                runCatching { assembler.close() }
+                sessionJob.cancel()
             }
-        } catch (_: Exception) {
-            runCatching { dispatcher.cancelPending() }
-            runCatching { assembler.discard() }
-        } finally {
-            runCatching { recorder.close() }
-            runCatching { assembler.close() }
-            sessionJob.cancel()
         }
     }
 

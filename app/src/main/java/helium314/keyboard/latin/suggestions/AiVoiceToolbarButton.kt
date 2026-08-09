@@ -149,6 +149,6 @@ class AiVoiceToolbarButton @JvmOverloads constructor(
         const val LOADER_ROTATION_DURATION_MILLIS = 900L
         const val LOADER_RADIUS_FRACTION = 0.22f
         const val LOADER_SWEEP_DEGREES = 210f
-        const val RECORDING_TINT = 0xFFF44336
+        val RECORDING_TINT = 0xFFF44336.toInt()
     }
 }

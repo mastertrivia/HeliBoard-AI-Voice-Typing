@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -43,7 +42,6 @@ import helium314.keyboard.latin.aivoice.domain.AiVoiceConfig
 import helium314.keyboard.latin.aivoice.domain.AiVoiceSettingsRepository
 import helium314.keyboard.latin.aivoice.domain.NewProfileDraft
 import helium314.keyboard.latin.aivoice.domain.ProviderCatalog
-import helium314.keyboard.latin.aivoice.domain.ProviderDescriptor
 import helium314.keyboard.latin.aivoice.domain.ValidationState
 import helium314.keyboard.latin.aivoice.runtime.AiVoiceDependencies
 import helium314.keyboard.latin.aivoice.runtime.AiVoiceRecordingState
@@ -56,7 +54,6 @@ import helium314.keyboard.settings.preferences.Preference
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import sh.calvin.reorderable.ReorderableItem
-import sh.calvin.reorderable.longPressDraggableHandle
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
 /** Entry only. Profile management itself lives on its own settings route. */
@@ -178,6 +175,7 @@ private fun AiVoiceProfilesPage(
                             ProfileRow(
                                 profile = profile,
                                 catalog = catalog,
+                                dragHandle = Modifier.longPressDraggableHandle(),
                                 onEdit = { if (!saving) draft = profile.toDraft() },
                                 onEnabledChange = { enabled ->
                                     scope.launch {
@@ -285,6 +283,7 @@ private fun AiVoiceProfilesPage(
 private fun ProfileRow(
     profile: ApiProfile,
     catalog: ProviderCatalog,
+    dragHandle: Modifier,
     onEdit: () -> Unit,
     onEnabledChange: (Boolean) -> Unit,
 ) {
@@ -295,7 +294,7 @@ private fun ProfileRow(
         Icon(
             painter = painterResource(R.drawable.ic_drag_indicator),
             contentDescription = stringResource(R.string.ai_voice_reorder_profile),
-            modifier = Modifier.longPressDraggableHandle().padding(16.dp),
+            modifier = dragHandle.padding(16.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
@@ -389,7 +388,7 @@ private fun ProfileEditorDialog(
             }
         },
     )
-    if (choosingProvider) ListPickerDialog(onDismissRequest = { choosingProvider = false }, title = { Text(stringResource(R.string.ai_voice_provider)) }, items = catalog.providers().filter { it.models.isNotEmpty() }, selectedItem = descriptor, getItemName = ProviderDescriptor::label, onItemSelected = { provider -> draft = draft.copy(providerId = provider.id, modelId = provider.models.first().id, validation = ValidationState.UNTESTED, providerOptions = emptyMap()); choosingProvider = false })
+    if (choosingProvider) ListPickerDialog(onDismissRequest = { choosingProvider = false }, title = { Text(stringResource(R.string.ai_voice_provider)) }, items = catalog.providers().filter { it.models.isNotEmpty() }, selectedItem = descriptor, getItemName = { it.label }, onItemSelected = { provider -> draft = draft.copy(providerId = provider.id, modelId = provider.models.first().id, validation = ValidationState.UNTESTED, providerOptions = emptyMap()); choosingProvider = false })
     if (choosingModel && descriptor != null) ListPickerDialog(onDismissRequest = { choosingModel = false }, title = { Text(stringResource(R.string.ai_voice_model)) }, items = descriptor.models, selectedItem = descriptor.models.firstOrNull { it.id == draft.modelId }, getItemName = { it.label }, onItemSelected = { model -> draft = draft.copy(modelId = model.id, validation = ValidationState.UNTESTED); choosingModel = false })
 }
 

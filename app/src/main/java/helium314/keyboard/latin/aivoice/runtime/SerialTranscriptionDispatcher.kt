@@ -79,7 +79,7 @@ internal class SerialTranscriptionDispatcher(
             val sequence = chunk.sequence
             val initial = providerResolver.resolve(profile)
             if (initial !is ProviderResolution.Ready) {
-                emit(DiagnosticLevel.ERROR, "AI-0505", sequence, message = "Provider resolution failed", reason = "stage=resolution | profile=${traceLabel(profile)}")
+                emit(DiagnosticLevel.ERROR, "AI-0505", sequence, message = "Provider resolution failed", reason = "stage=resolution | profile=${profile.traceLabel()}")
                 return
             }
             when (val outcome = attempt(chunk, profile, initial.value)) {
@@ -114,12 +114,12 @@ internal class SerialTranscriptionDispatcher(
     }
 
     private suspend fun fallback(chunk: AudioChunk, sequence: Long, candidates: List<ApiProfile>) {
-        val attempted = mutableListOf(traceLabel(profile))
+        val attempted = mutableListOf(profile.traceLabel())
         var lastFailure: ProviderException? = null
         for ((index, candidate) in candidates.withIndex()) {
             val resolved = providerResolver.resolve(candidate)
             if (resolved !is ProviderResolution.Ready) continue
-            attempted += traceLabel(candidate)
+            attempted += candidate.traceLabel()
             val next = candidates.getOrNull(index + 1)
             when (val outcome = attempt(chunk, candidate, resolved.value)) {
                 is AttemptResult.Success -> {
@@ -163,7 +163,7 @@ internal class SerialTranscriptionDispatcher(
         AttemptResult.Failure(failure)
     }
 
-    private fun insertOutcome(outcome: AttemptResult.Success, sequence: Long, target: ApiProfile) {
+    private suspend fun insertOutcome(outcome: AttemptResult.Success, sequence: Long, target: ApiProfile) {
         when (inserter.insert(outcome.result.text, sessionId, sequence, insertionGate::allowsInsertion)) {
             InsertResult.Inserted -> Unit
             InsertResult.NoConnection, InsertResult.Rejected -> emit(DiagnosticLevel.WARNING, "AI-0603", sequence, target = target, reason = "stage=insert | cause=editor_no_longer_accepts_text")
@@ -181,7 +181,7 @@ internal class SerialTranscriptionDispatcher(
         val serverResponse = if (stage == "provider_http") "received" else "not_reached"
         val lines = mutableListOf(
             "REQUEST_TRACE",
-            "profile=${traceLabel(target)}",
+            "profile=${target.traceLabel()}",
             "provider=${target.providerId}",
             "model=${target.modelId}",
             "chunk=${chunk.sequence}",
@@ -201,23 +201,23 @@ internal class SerialTranscriptionDispatcher(
         lines += "failure_stage=$stage"
         if (failure.retried) lines += "provider_retry=yes"
         if (fallbackTriggered) lines += "fallback=TRIGGERED"
-        nextProfile?.let { lines += "next_profile=${traceLabel(it)}" }
+        nextProfile?.let { lines += "next_profile=${it.traceLabel()}" }
         emit(DiagnosticLevel.ERROR, "AI-0511", chunk.sequence, message = "Request trace", target = target, reason = lines.joinToString("\n"))
     }
 
     /** One compact step of the actual fallback path. */
     private fun emitFailover(chunk: AudioChunk, failedTarget: ApiProfile, failure: ProviderException, nextProfile: ApiProfile?) {
         emit(DiagnosticLevel.WARNING, "AI-0512", chunk.sequence, message = "Failover step", target = failedTarget, reason = buildString {
-            append("FAILOVER | failed_profile=").append(traceLabel(failedTarget))
+            append("FAILOVER | failed_profile=").append(failedTarget.traceLabel())
             append(" | failure_reason=").append(failureReasonLabel(failure))
             append(" | retry_same_audio=true")
-            nextProfile?.let { append(" | next_profile=").append(traceLabel(it)) }
+            nextProfile?.let { append(" | next_profile=").append(it.traceLabel()) }
         })
     }
 
     private fun emitFailoverSuccess(chunk: AudioChunk, target: ApiProfile, attempts: Int) {
         emit(DiagnosticLevel.INFO, "AI-0513", chunk.sequence, message = "Failover succeeded", target = target, reason = buildString {
-            append("FAILOVER_SUCCESS | profile=").append(traceLabel(target))
+            append("FAILOVER_SUCCESS | profile=").append(target.traceLabel())
             append(" | transcription_received=true")
             append(" | attempts=").append(attempts)
         })
@@ -256,7 +256,7 @@ internal class SerialTranscriptionDispatcher(
                 ProviderFailure.NetworkUnavailable -> "network"
                 ProviderFailure.NetworkTimeout -> "timeout"
                 ProviderFailure.Server -> "server"
-                ProviderFailure.Unknown -> "unknown"
+                is ProviderFailure.Unknown -> "unknown"
                 ProviderFailure.Cancelled -> "cancelled"
             }
         }
@@ -269,7 +269,7 @@ internal class SerialTranscriptionDispatcher(
         ProviderFailure.NetworkTimeout -> "timeout"
         ProviderFailure.MalformedResponse -> "response_parser"
         ProviderFailure.Authentication, ProviderFailure.InvalidRequest, ProviderFailure.ModelUnavailable -> "request_validation"
-        ProviderFailure.Unknown, ProviderFailure.Cancelled -> "unknown"
+        is ProviderFailure.Unknown, ProviderFailure.Cancelled -> "unknown"
     }
 
     private sealed interface AttemptResult {
