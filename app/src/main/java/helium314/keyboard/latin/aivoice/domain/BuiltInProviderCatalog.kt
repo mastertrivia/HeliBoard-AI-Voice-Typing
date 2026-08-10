@@ -8,7 +8,11 @@ class BuiltInProviderCatalog : ProviderCatalog {
             ModelDescriptor("whisper-large-v3-turbo", "whisper-large-v3-turbo"),
             ModelDescriptor("whisper-large-v3", "whisper-large-v3"),
         )),
-        ProviderDescriptor("google", "Google", listOf(ModelDescriptor("gemini-speech", "Gemini Speech"))),
+        ProviderDescriptor("google", "Google", listOf(
+            ModelDescriptor("gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite — Fastest / cheapest"),
+            ModelDescriptor("gemini-3.6-flash", "Gemini 3.6 Flash — Latest / recommended"),
+            ModelDescriptor("gemini-flash-latest", "Gemini Flash Latest — Automatic latest Flash"),
+        )),
         ProviderDescriptor("openai", "OpenAI", emptyList()),
         ProviderDescriptor("deepgram", "Deepgram", emptyList()),
     )

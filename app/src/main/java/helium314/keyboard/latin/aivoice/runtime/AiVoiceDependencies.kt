@@ -9,6 +9,7 @@ import helium314.keyboard.latin.aivoice.domain.BuiltInProviderCatalog
 import helium314.keyboard.latin.aivoice.language.HeliBoardKeyboardLanguageHint
 import helium314.keyboard.latin.aivoice.provider.SpeechProviderRegistry
 import helium314.keyboard.latin.aivoice.provider.GroqSpeechProvider
+import helium314.keyboard.latin.aivoice.provider.GeminiSpeechProvider
 import helium314.keyboard.latin.aivoice.provider.ProviderResolver
 import helium314.keyboard.latin.aivoice.provider.TranscriptionRequestFactory
 import okhttp3.OkHttpClient
@@ -31,7 +32,10 @@ class AiVoiceDependencies private constructor(context: Context) {
         .writeTimeout(60, TimeUnit.SECONDS)
         .callTimeout(75, TimeUnit.SECONDS)
         .build()
-    val providers = SpeechProviderRegistry(setOf(GroqSpeechProvider(httpClient, catalog)))
+    val providers = SpeechProviderRegistry(setOf(
+        GroqSpeechProvider(httpClient, catalog),
+        GeminiSpeechProvider(httpClient, catalog),
+    ))
     val providerResolver = ProviderResolver(catalog, apiKeyStore, providers, settingsRepository, diagnostics)
     /** Future audio dispatcher uses this to snapshot the active HeliBoard subtype per request. */
     val transcriptionRequestFactory = TranscriptionRequestFactory(HeliBoardKeyboardLanguageHint())

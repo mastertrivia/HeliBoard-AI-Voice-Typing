@@ -125,7 +125,12 @@ class DefaultRotationCoordinator(
     override suspend fun requestFailureRotation(profileId: String, failure: ProviderFailure): Boolean = try {
         mutex.withLock {
         if (!failure.isRotationEligible()) {
-            emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.INFO, code = "AI-0709", message = "Provider failure does not qualify for profile rotation"))
+            emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.INFO, code = "AI-0709", message = "Provider failure does not qualify for profile rotation",
+                reason = buildString {
+                    append("profile=").append(profileId)
+                    append(" | failure=").append(failure.javaClass.simpleName)
+                    append(" | rotationEnabled=").append(repository.config.value.rotation.failureRotationEnabled)
+                }))
             return@withLock false
         }
         var queued = false

@@ -17,7 +17,7 @@ data class AiVoiceConfig(
     companion object {
         const val SCHEMA_VERSION = 6
         /** Hard product limit: one encrypted credential is owned by each profile. */
-        const val MAX_PROFILES = 40
+        const val MAX_PROFILES = 100
     }
 }
 
