@@ -66,6 +66,8 @@ data class RotationConfig(
     val pendingTriggers: Set<RotationTrigger> = emptySet(),
     /** Profile that queued a pending failure trigger; a stale failure must never be attributed to a later active profile. */
     val pendingFailureProfileId: String? = null,
+    /** Rotation-eligible profiles that failed during a fallback chain, for the same disable evaluation as the active profile. */
+    val pendingFailedProfileIds: List<String> = emptyList(),
 )
 
 /** Persisted only to preserve safe-boundary rotation requests across IME/process recreation. */

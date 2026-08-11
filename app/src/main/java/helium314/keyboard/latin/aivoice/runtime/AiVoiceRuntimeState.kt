@@ -14,6 +14,8 @@ data class AiVoiceRuntimeState(
     val startedAtElapsedRealtime: Long? = null,
     /** Start of the current audio chunk; resets without changing the recording session. */
     val chunkStartedAtElapsedRealtime: Long? = null,
+    /** Anchor of the single 45-second processing/retry UI window for one recording cycle. */
+    val processingStartedAtElapsedRealtime: Long? = null,
     val languageModeLabel: String = "Not configured",
     val chunkModeLabel: String = "Disabled",
     val lastErrorCode: String? = null,

@@ -15,7 +15,6 @@ import helium314.keyboard.latin.aivoice.provider.TranscriptionResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
@@ -38,7 +37,7 @@ internal class SerialTranscriptionDispatcher(
     private val diagnostics: AiDiagnosticsSink,
     parentScope: CoroutineScope,
 ) : TranscriptionDispatcher {
-    private val job = SupervisorJob(parentScope.coroutineContext[Job])
+    private val job = SupervisorJob()
     private val scope = CoroutineScope(parentScope.coroutineContext + job + Dispatchers.IO)
     private val queue = Channel<AudioChunk>(QUEUE_CAPACITY)
     private val closeMutex = Mutex()
@@ -70,12 +69,18 @@ internal class SerialTranscriptionDispatcher(
             queue.close()
         }
         job.cancelAndJoin()
-        while (true) queue.tryReceive().getOrNull()?.wavFile?.delete() ?: break
+        while (true) {
+            val queued = queue.tryReceive().getOrNull() ?: break
+            emit(DiagnosticLevel.ERROR, "AI-0506", queued.sequence, message = "Provider request cancelled", reason = "stage=cancel_pending | cause=session_aborted | audio_preserved=true")
+        }
     }
 
     private suspend fun process(chunk: AudioChunk) {
         try {
-            if (!insertionGate.allowsInsertion()) return
+            if (!insertionGate.allowsInsertion()) {
+                emit(DiagnosticLevel.ERROR, "AI-0603", chunk.sequence, message = "Text insertion rejected", reason = "stage=gate | cause=editor_no_longer_accepts_text | audio_preserved=true")
+                return
+            }
             val sequence = chunk.sequence
             val initial = providerResolver.resolve(profile)
             if (initial !is ProviderResolution.Ready) {
@@ -83,33 +88,33 @@ internal class SerialTranscriptionDispatcher(
                 return
             }
             when (val outcome = attempt(chunk, profile, initial.value)) {
-                is AttemptResult.Success -> { insertOutcome(outcome, sequence, profile); return }
+                is AttemptResult.Success -> {
+                    if (insertOutcome(outcome, sequence, profile)) deleteChunk(chunk)
+                    return
+                }
                 AttemptResult.Blank -> { emitBlank(chunk, profile); return }
                 is AttemptResult.Failure -> {
-                    val failover = runCatching {
-                        rotationCoordinator.requestFailureRotation(profile.id, outcome.failure.failure)
-                    }.getOrDefault(false)
-                    if (!failover) {
-                        emitRequestTrace(chunk, profile, outcome.failure, fallbackTriggered = false, nextProfile = null)
-                        return
-                    }
-                    // Failover preserves the exact same audio payload and only advances the profile.
+                    // Rotation eligibility is persistent bookkeeping for the next session boundary;
+                    // the per-chunk failover retry with the identical audio payload always runs so a
+                    // genuine failure can never silently drop recorded audio.
                     val candidates = runCatching { rotationCoordinator.failoverCandidates(profile.id) }.getOrDefault(emptyList())
-                    emitRequestTrace(chunk, profile, outcome.failure, fallbackTriggered = true, nextProfile = candidates.firstOrNull())
-                    emitFailover(chunk, profile, outcome.failure, nextProfile = candidates.firstOrNull())
+                    runCatching { rotationCoordinator.requestFailureRotation(profile.id, outcome.failure.failure) }
+                    emitRequestTrace(chunk, profile, outcome.failure, fallbackTriggered = candidates.isNotEmpty(), nextProfile = candidates.firstOrNull())
+                    if (candidates.isNotEmpty()) emitFailover(chunk, profile, outcome.failure, nextProfile = candidates.firstOrNull())
                     fallback(chunk, sequence, candidates)
                 }
             }
         } catch (cancelled: CancellationException) {
+            // A cancelled attempt must still surface as a terminal event; the audio file is retained
+            // for the controller-created cleanup sweep instead of being silently deleted.
+            emit(DiagnosticLevel.ERROR, "AI-0506", chunk.sequence, message = "Provider request cancelled", reason = "stage=dispatch | cause=cancelled_before_delivery | audio_preserved=true")
             throw cancelled
         } catch (failure: ProviderException) {
-            // Fallback is advisory. A persistence/diagnostic fault must not kill the serial
-            // worker or prevent a later chunk from using the still-active profile.
+            // Fallback is advisory. A persistence/diagnostic fault must not kill the serial worker.
             runCatching { rotationCoordinator.requestFailureRotation(profile.id, failure.failure) }
+            emit(DiagnosticLevel.ERROR, "AI-0505", chunk.sequence, message = "Dispatch failure", reason = "stage=dispatch | failure=${failureReasonLabel(failure)}")
         } catch (_: Exception) {
             emit(DiagnosticLevel.ERROR, "AI-0505", chunk.sequence, message = "Dispatch failure")
-        } finally {
-            chunk.wavFile.delete()
         }
     }
 
@@ -124,7 +129,8 @@ internal class SerialTranscriptionDispatcher(
             when (val outcome = attempt(chunk, candidate, resolved.value)) {
                 is AttemptResult.Success -> {
                     emitFailoverSuccess(chunk, candidate, attempted.size)
-                    insertOutcome(outcome, sequence, candidate)
+                    runCatching { rotationCoordinator.recordFallbackSuccess(candidate.id) }
+                    if (insertOutcome(outcome, sequence, candidate)) deleteChunk(chunk)
                     return
                 }
                 AttemptResult.Blank -> emitBlank(chunk, candidate)
@@ -132,7 +138,7 @@ internal class SerialTranscriptionDispatcher(
                     lastFailure = outcome.failure
                     emitRequestTrace(chunk, candidate, outcome.failure, fallbackTriggered = true, nextProfile = next)
                     emitFailover(chunk, candidate, outcome.failure, nextProfile = next)
-                    runCatching { rotationCoordinator.requestFailureRotation(candidate.id, outcome.failure.failure) }
+                    runCatching { rotationCoordinator.recordFallbackFailure(candidate.id, outcome.failure.failure) }
                 }
             }
         }
@@ -163,11 +169,22 @@ internal class SerialTranscriptionDispatcher(
         AttemptResult.Failure(failure)
     }
 
-    private suspend fun insertOutcome(outcome: AttemptResult.Success, sequence: Long, target: ApiProfile) {
+    /** @return true only when the transcript was confirmed delivered so the caller may delete the WAV. */
+    private suspend fun insertOutcome(outcome: AttemptResult.Success, sequence: Long, target: ApiProfile): Boolean =
         when (inserter.insert(outcome.result.text, sessionId, sequence, insertionGate::allowsInsertion)) {
-            InsertResult.Inserted -> Unit
-            InsertResult.NoConnection, InsertResult.Rejected -> emit(DiagnosticLevel.WARNING, "AI-0603", sequence, target = target, reason = "stage=insert | cause=editor_no_longer_accepts_text")
+            InsertResult.Inserted -> {
+                emit(DiagnosticLevel.INFO, "AI-0602", sequence, target = target, reason = "stage=insert | result=inserted")
+                true
+            }
+            InsertResult.NoConnection, InsertResult.Rejected -> {
+                emit(DiagnosticLevel.WARNING, "AI-0603", sequence, target = target, reason = "stage=insert | cause=editor_no_longer_accepts_text")
+                false
+            }
         }
+
+    /** Deletes the WAV only after the transcript was confirmed inserted into the editor. */
+    private fun deleteChunk(chunk: AudioChunk) {
+        runCatching { chunk.wavFile.delete() }
     }
 
     /** Multi-line pipeline trace for one failed request attempt. Only actually-known stages are marked. */

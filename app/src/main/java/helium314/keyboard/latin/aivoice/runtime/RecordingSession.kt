@@ -93,10 +93,11 @@ class RecordingSession(
                     runCatching { assembler.flushFinal() }.getOrNull()?.let { chunk ->
                         runCatching { dispatcher.enqueue(chunk) }
                     }
-                    val drained = runCatching {
-                        withTimeoutOrNull(FINAL_DRAIN_TIMEOUT_MILLIS) { dispatcher.drain() }
-                    }.getOrNull()
-                    if (drained == null) runCatching { dispatcher.cancelPending() }
+                    // The dispatcher worker is detached from the session scope, so a timed-out drain
+                    // leaves it running in the background and never abandons an in-flight chunk.
+                    // Provider calls stay bounded by the OkHttp call timeout, and the WAV is deleted
+                    // only after a confirmed insertion, so nothing is silently dropped here.
+                    runCatching { withTimeoutOrNull(FINAL_DRAIN_TIMEOUT_MILLIS) { dispatcher.drain() } }
                 } else {
                     runCatching { dispatcher.cancelPending() }
                     runCatching { assembler.discard() }
@@ -112,5 +113,5 @@ class RecordingSession(
         }
     }
 
-    private companion object { const val FINAL_DRAIN_TIMEOUT_MILLIS = 15_000L }
+    private companion object { const val FINAL_DRAIN_TIMEOUT_MILLIS = 45_000L }
 }

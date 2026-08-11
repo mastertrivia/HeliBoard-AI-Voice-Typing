@@ -28,7 +28,6 @@ import org.robolectric.RobolectricTestRunner
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** End-to-end coverage for the serial dispatcher's per-chunk failover retry cycle. */
@@ -196,7 +195,7 @@ class SerialTranscriptionDispatcherFailoverTest {
     }
 
     @Test
-    fun `complete exhaustion reports AI-0604 and releases the audio only after the cycle`() = runScenario(
+    fun `complete exhaustion reports AI-0604 and preserves the audio after the cycle`() = runScenario(
         profiles = listOf(profile("a", 1), profile("b", 2)),
         active = profile("a", 1),
         script = { if (it == "a") Script.FAIL_AUTH else Script.FAIL_SERVER },
@@ -207,7 +206,7 @@ class SerialTranscriptionDispatcherFailoverTest {
         assertEquals(1, exhausted.size)
         assertEquals(DiagnosticLevel.ERROR, exhausted.single().level)
         assertEquals(1L, exhausted.single().chunkSequence)
-        assertFalse(chunk.wavFile.exists(), "the WAV must be deleted only after the full cycle is exhausted")
+        assertTrue(chunk.wavFile.exists(), "the WAV must be retained when no profile delivered the transcript")
     }
 
     @Test
@@ -222,14 +221,15 @@ class SerialTranscriptionDispatcherFailoverTest {
     }
 
     @Test
-    fun `non eligible failure does not enter the fallback cycle`() = runScenario(
+    fun `any genuine failure enters the fallback cycle regardless of rotation eligibility`() = runScenario(
         profiles = listOf(profile("a", 1), profile("b", 2)),
         active = profile("a", 1),
         script = { Script.FAIL_INVALID },
-    ) { harness, _, events ->
-        assertEquals(listOf("a"), harness.provider.requests.map { it.profile.id })
+    ) { harness, chunk, events ->
+        assertEquals(listOf("a", "b"), harness.provider.requests.map { it.profile.id })
         assertTrue(harness.inserter.inserted.isEmpty())
-        assertTrue(events.none { it.code == "AI-0604" })
+        assertTrue(events.any { it.code == "AI-0604" })
+        assertTrue(chunk.wavFile.exists(), "the WAV must be retained when the fallback cycle is exhausted")
     }
 
     @Test

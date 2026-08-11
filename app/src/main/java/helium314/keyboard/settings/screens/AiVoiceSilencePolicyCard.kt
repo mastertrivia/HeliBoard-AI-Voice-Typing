@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package helium314.keyboard.settings.screens
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -8,7 +10,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.aivoice.domain.AiVoiceConfig
 import helium314.keyboard.latin.aivoice.domain.AiVoiceSettingsRepository
@@ -65,6 +69,12 @@ internal fun AiVoiceSilencePolicyCard(
         name = stringResource(R.string.ai_voice_auto_send_after_silence),
         description = silenceDurationLabel(selectedAutoSendDuration),
         onClick = { if (!updateInFlight) showAutoSendDurationPicker = true },
+    )
+    Text(
+        stringResource(R.string.ai_voice_auto_send_after_silence_warning),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.error,
+        modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 4.dp),
     )
     Preference(
         name = stringResource(R.string.ai_voice_stop_microphone_after_prolonged_silence),

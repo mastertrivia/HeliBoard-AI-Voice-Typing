@@ -205,7 +205,11 @@ class DefaultAiVoiceSessionController(
             return
         }
         state = SessionState.Stopping(sessionId, reason)
-        runtimeState.publish(AiVoiceRuntimeState(recording = AiVoiceRecordingState.STOPPING, sessionId = sessionId))
+        runtimeState.publish(AiVoiceRuntimeState(
+            recording = AiVoiceRecordingState.STOPPING,
+            sessionId = sessionId,
+            processingStartedAtElapsedRealtime = SystemClock.elapsedRealtime(),
+        ))
         val closingSession = session
         session = null
         drainingSession = closingSession

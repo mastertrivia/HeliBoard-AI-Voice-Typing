@@ -27,6 +27,17 @@ interface RotationCoordinator {
      * Returns true only when the failure was actually queued for rotation.
      */
     suspend fun requestFailureRotation(profileId: String, failure: ProviderFailure): Boolean
+    /**
+     * Records a rotation-eligible failure of a fallback candidate so it receives the same disable
+     * evaluation as the active profile. Does not queue rotation; the FAILURE trigger is owned by
+     * the active profile and is a precondition for recording.
+     */
+    suspend fun recordFallbackFailure(profileId: String, failure: ProviderFailure)
+    /**
+     * Persists a successful fallback candidate as the active profile for the next session and
+     * removes it from the pending failed-candidate state so an earlier failure cannot disable it.
+     */
+    suspend fun recordFallbackSuccess(profileId: String)
     /** Eligible profiles for a single-job failover retry, in ring order after the failed profile. */
     suspend fun failoverCandidates(fromProfileId: String): List<ApiProfile>
     suspend fun completeSession(sessionProfileId: String, nowWallMillis: Long, nowElapsedMillis: Long)
@@ -165,6 +176,92 @@ class DefaultRotationCoordinator(
         false
     }
 
+    override suspend fun recordFallbackFailure(profileId: String, failure: ProviderFailure) {
+        try {
+            var recorded = false
+            mutex.withLock {
+                if (!failure.isRotationEligible()) {
+                    emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.INFO, code = "AI-0709", message = "Fallback failure does not qualify for disable evaluation",
+                        reason = buildString {
+                            append("profile=").append(profileId)
+                            append(" | failure=").append(failure.javaClass.simpleName)
+                            append(" | eligibility=unchanged")
+                        }))
+                    return@withLock
+                }
+                repository.update("record_fallback_failure") { config ->
+                    // Candidate evidence is only consumed by the disable path that an eligible
+                    // active-profile failure already engaged, so it can never dangle.
+                    val queuedForRotation = config.rotation.pendingFailureProfileId != null
+                    val alreadyRecorded = profileId in config.rotation.pendingFailedProfileIds
+                    if (!queuedForRotation || alreadyRecorded) return@update config
+                    recorded = true
+                    config.copy(rotation = config.rotation.copy(
+                        pendingFailedProfileIds = config.rotation.pendingFailedProfileIds + profileId,
+                    ))
+                }
+                if (recorded) {
+                    pendingFailureTypes[profileId] = failure.javaClass.simpleName
+                    emitSafely(AiDiagnosticEvent(
+                        level = DiagnosticLevel.INFO, code = "AI-0712",
+                        message = "Fallback candidate failure recorded for disable evaluation",
+                        reason = buildString {
+                            append("profile=").append(profileId)
+                            append(" | failure=").append(failure.javaClass.simpleName)
+                            append(" | disableEligibility=").append(failure.isRotationEligible())
+                        },
+                    ))
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.WARNING, code = "AI-0708", message = "Fallback failure recording was ignored"))
+        }
+    }
+
+    override suspend fun recordFallbackSuccess(profileId: String) {
+        try {
+            var applied = false
+            mutex.withLock {
+                repository.update("record_fallback_success") { config ->
+                    val profile = config.profiles.firstOrNull { it.id == profileId && it.enabled }
+                        ?: return@update config
+                    // The successful candidate is queued for the NEXT session through the existing
+                    // pending-profile mechanism; the live session profile stays immutable. A manual
+                    // pending selection made during the session keeps priority.
+                    val pendingChanged = config.pendingProfileId == null
+                    val removeFromFailed = config.rotation.pendingFailedProfileIds.filterNot { it == profileId }
+                    if (!pendingChanged && removeFromFailed == config.rotation.pendingFailedProfileIds) return@update config
+                    applied = true
+                    config.copy(
+                        pendingProfileId = if (pendingChanged) profileId else config.pendingProfileId,
+                        rotation = config.rotation.copy(
+                            // The original active-profile failure attribution must survive a fallback success.
+                            pendingFailureProfileId = config.rotation.pendingFailureProfileId,
+                            pendingFailedProfileIds = removeFromFailed,
+                        ),
+                    )
+                }
+                if (applied) {
+                    pendingFailureTypes.remove(profileId)
+                    emitSafely(AiDiagnosticEvent(
+                        level = DiagnosticLevel.INFO, code = "AI-0711",
+                        message = "Fallback success queued for next session",
+                        reason = buildString {
+                            append("PROFILE | profile=").append(profileId)
+                            append(" | cause=fallback_success")
+                        },
+                    ))
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.WARNING, code = "AI-0708", message = "Fallback success persistence was ignored"))
+        }
+    }
+
     override suspend fun failoverCandidates(fromProfileId: String): List<ApiProfile> = try {
         mutex.withLock {
             val usableProfileIds = mutableSetOf<String>()
@@ -203,31 +300,34 @@ class DefaultRotationCoordinator(
         val due = dueTriggers(anchoredConfig.rotation, wall, elapsed)
         if (due.isEmpty()) return anchoredConfig to active
         val winner = triggerPriority.first { it in due }
-        val failedProfileId = anchoredConfig.rotation.pendingFailureProfileId
-        if (winner == RotationTrigger.FAILURE && failedProfileId != null && failedProfileId != active.id) {
-            // The pending failure belongs to a profile that is no longer active (a manual
-            // selection superseded it). It may only disable that profile; it must never rotate
-            // or disable the newly selected active profile.
+        // Every rotation-eligible profile that failed since the last boundary (the original active
+        // profile plus each fallback candidate) is evaluated by the same disable path.
+        val failedProfileIds = (anchoredConfig.rotation.pendingFailedProfileIds + listOfNotNull(anchoredConfig.rotation.pendingFailureProfileId)).distinct()
+        if (winner == RotationTrigger.FAILURE && failedProfileIds.isNotEmpty() && active.id !in failedProfileIds) {
+            // The pending failures belong to profiles that are no longer active (a fallback success
+            // or manual selection superseded them). They may only disable those profiles; they must
+            // never rotate or disable the newly selected active profile.
             val retained = (anchoredConfig.rotation.pendingTriggers + due) - RotationTrigger.FAILURE
             (due - RotationTrigger.FAILURE).forEach { emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.INFO, code = "AI-0706", profileSerial = active.serialNumber, message = "Rotation trigger deferred by safe-boundary arbitration: $it")) }
             if (config.rotation.disableFailedProfile) {
-                config.profiles.firstOrNull { it.id == failedProfileId }?.let { emitProfileDisabled(it, pendingFailureTypes.remove(failedProfileId)) }
+                config.profiles.filter { it.id in failedProfileIds }.forEach { emitProfileDisabled(it, pendingFailureTypes.remove(it.id)) }
             }
             return config.copy(
                 profiles = if (config.rotation.disableFailedProfile) {
-                    config.profiles.map { profile -> if (profile.id == failedProfileId) profile.copy(enabled = false) else profile }
+                    config.profiles.map { profile -> if (profile.id in failedProfileIds) profile.copy(enabled = false) else profile }
                 } else config.profiles,
-                rotation = anchoredConfig.rotation.copy(pendingTriggers = retained, pendingFailureProfileId = null),
+                rotation = anchoredConfig.rotation.copy(pendingTriggers = retained, pendingFailureProfileId = null, pendingFailedProfileIds = emptyList()),
             ) to active
         }
-        val next = nextEligible(config, active, usableProfileIds)
+        val disabledIds = if (winner == RotationTrigger.FAILURE && config.rotation.disableFailedProfile) failedProfileIds.toSet() else emptySet()
+        val next = nextEligible(config.copy(profiles = config.profiles.map { if (it.id in disabledIds) it.copy(enabled = false) else it }), active, usableProfileIds)
         if (next == null) {
             emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.WARNING, code = "AI-0703", profileSerial = active.serialNumber, message = "Rotation is due but no alternate eligible profile exists", reason = "cause=no alternate enabled, supported, installed profile"))
             return anchoredConfig.copy(rotation = anchoredConfig.rotation.copy(pendingTriggers = anchoredConfig.rotation.pendingTriggers + due)) to active
         }
         val retained = (anchoredConfig.rotation.pendingTriggers + due) - winner
         (due - winner).forEach { emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.INFO, code = "AI-0706", profileSerial = active.serialNumber, message = "Rotation trigger deferred by safe-boundary arbitration: $it")) }
-        val disabledFrom = winner == RotationTrigger.FAILURE && config.rotation.disableFailedProfile
+        val disabledFrom = disabledIds.isNotEmpty() && active.id in disabledIds
         if (disabledFrom) emitProfileDisabled(active, pendingFailureTypes.remove(active.id))
         diagnostics.info("AI-0707", next, "Profile rotated for $winner at session boundary",
             reason = buildString {
@@ -241,12 +341,13 @@ class DefaultRotationCoordinator(
             // This uses the same durable enabled flag as the Profiles page toggle. It runs only
             // after failure rotation has selected an alternate profile, never on other triggers.
             profiles = if (winner == RotationTrigger.FAILURE && config.rotation.disableFailedProfile) {
-                config.profiles.map { profile -> if (profile.id == active.id) profile.copy(enabled = false) else profile }
+                config.profiles.map { profile -> if (profile.id in failedProfileIds) profile.copy(enabled = false) else profile }
             } else config.profiles,
             rotation = resetForNewActiveProfile(
                 anchoredConfig.rotation.copy(
                     pendingTriggers = retained,
                     pendingFailureProfileId = if (winner == RotationTrigger.FAILURE) null else anchoredConfig.rotation.pendingFailureProfileId,
+                    pendingFailedProfileIds = if (winner == RotationTrigger.FAILURE) emptyList() else anchoredConfig.rotation.pendingFailedProfileIds,
                 ),
                 wall, elapsed,
             ),

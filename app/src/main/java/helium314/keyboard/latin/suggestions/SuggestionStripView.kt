@@ -142,12 +142,31 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private var aiVoiceToolbarState = AiVoiceRuntimeState()
     private val aiVoiceToolbarScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var aiVoiceToolbarCollection: Job? = null
+    private var aiVoiceProcessingAnchor: Long? = null
+    private var aiVoiceProcessingOverrideUntil: Long = 0L
     private val aiVoiceToolbarTicker = object : Runnable {
         override fun run() {
-            if (aiVoiceToolbarState.recording != AiVoiceRecordingState.RECORDING) return
+            val state = aiVoiceToolbarState
             updateAiVoiceToolbarVisuals()
-            val elapsed = SystemClock.elapsedRealtime() - (aiVoiceToolbarState.chunkStartedAtElapsedRealtime ?: return)
-            postDelayed(this, 1_000L - elapsed % 1_000L)
+            when (state.recording) {
+                AiVoiceRecordingState.RECORDING -> {
+                    val elapsed = SystemClock.elapsedRealtime() - (state.chunkStartedAtElapsedRealtime ?: return)
+                    postDelayed(this, 1_000L - elapsed % 1_000L)
+                }
+                AiVoiceRecordingState.STOPPING -> {
+                    val start = state.processingStartedAtElapsedRealtime ?: return
+                    val now = SystemClock.elapsedRealtime()
+                    val windowEnd = start + AI_VOICE_PROCESSING_WINDOW_MILLIS
+                    if (now >= windowEnd) return
+                    val nextBoundary = listOf(
+                        start + AI_VOICE_PROCESSING_PHASE_MILLIS,
+                        aiVoiceProcessingOverrideUntil,
+                        windowEnd,
+                    ).filter { it > now }.minOrNull() ?: return
+                    postDelayed(this, (nextBoundary - now).coerceAtLeast(50L))
+                }
+                else -> Unit
+            }
         }
     }
 
@@ -340,7 +359,12 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
                     aiVoiceToolbarState = state
                     removeCallbacks(aiVoiceToolbarTicker)
                     updateAiVoiceToolbarVisuals()
-                    if (state.recording == AiVoiceRecordingState.RECORDING) post(aiVoiceToolbarTicker)
+                    if (state.recording == AiVoiceRecordingState.RECORDING) {
+                        post(aiVoiceToolbarTicker)
+                    } else if (state.recording == AiVoiceRecordingState.STOPPING &&
+                        state.processingStartedAtElapsedRealtime != null) {
+                        post(aiVoiceToolbarTicker)
+                    }
                 }
             }
         }
@@ -372,6 +396,11 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         if (tag is ToolbarKey) {
             if (tag == ToolbarKey.AI_VOICE) {
                 AudioAndHapticFeedbackManager.getInstance().performHapticAndAudioFeedback(KeyCode.NOT_SPECIFIED, this, HapticEvent.KEY_PRESS)
+                val button = view as? AiVoiceToolbarButton
+                if (button != null && button.isShowingRetry()) {
+                    acknowledgeAiVoiceRetryTap()
+                    return
+                }
                 listener.onAiVoiceToggleRequested()
                 return
             }
@@ -592,16 +621,27 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     private fun updateAiVoiceToolbarVisuals(singleButton: ImageButton? = null) {
-        val recording = aiVoiceToolbarState.recording == AiVoiceRecordingState.RECORDING
-        val processing = aiVoiceToolbarState.recording == AiVoiceRecordingState.STOPPING
+        val state = aiVoiceToolbarState
+        val recording = state.recording == AiVoiceRecordingState.RECORDING
+        val processing = state.recording == AiVoiceRecordingState.STOPPING
         val elapsed = if (recording) {
-            SystemClock.elapsedRealtime() - (aiVoiceToolbarState.chunkStartedAtElapsedRealtime ?: 0L)
+            SystemClock.elapsedRealtime() - (state.chunkStartedAtElapsedRealtime ?: 0L)
         } else {
             0L
         }
+        val anchor = state.processingStartedAtElapsedRealtime
+        if (anchor != aiVoiceProcessingAnchor) {
+            aiVoiceProcessingAnchor = anchor
+            aiVoiceProcessingOverrideUntil = 0L
+        }
+        val now = SystemClock.elapsedRealtime()
+        val inWindow = processing && anchor != null && now < anchor + AI_VOICE_PROCESSING_WINDOW_MILLIS
+        val showProcessing = inWindow && anchor != null &&
+            (now < anchor + AI_VOICE_PROCESSING_PHASE_MILLIS || now < aiVoiceProcessingOverrideUntil)
+        val showRetry = inWindow && !showProcessing
         fun update(button: View) {
             if (button.tag == ToolbarKey.AI_VOICE && button is AiVoiceToolbarButton) {
-                button.setVisualState(recording, processing, elapsed)
+                button.setVisualState(recording, showProcessing, showRetry, elapsed)
             }
         }
         if (singleButton != null) update(singleButton)
@@ -611,10 +651,22 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         }
     }
 
+    private fun acknowledgeAiVoiceRetryTap() {
+        val start = aiVoiceToolbarState.processingStartedAtElapsedRealtime ?: return
+        val now = SystemClock.elapsedRealtime()
+        aiVoiceProcessingOverrideUntil = (now + AI_VOICE_PROCESSING_PHASE_MILLIS)
+            .coerceAtMost(start + AI_VOICE_PROCESSING_WINDOW_MILLIS)
+        removeCallbacks(aiVoiceToolbarTicker)
+        updateAiVoiceToolbarVisuals()
+        post(aiVoiceToolbarTicker)
+    }
+
     companion object {
         @JvmField
         var DEBUG_SUGGESTIONS = false
         private const val DEBUG_INFO_TEXT_SIZE_IN_DIP = 6.5f
+        private const val AI_VOICE_PROCESSING_PHASE_MILLIS = 15_000L
+        private const val AI_VOICE_PROCESSING_WINDOW_MILLIS = 45_000L
         private val TAG = SuggestionStripView::class.java.simpleName
     }
 }

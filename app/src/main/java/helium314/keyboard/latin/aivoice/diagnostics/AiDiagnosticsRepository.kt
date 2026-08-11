@@ -119,6 +119,8 @@ class AiDiagnosticsRepository(private val capacity: Int = 200) : AiDiagnosticsSi
         "AI-0708" -> "Rotation operation failed"
         "AI-0709" -> "Rotation not applied"
         "AI-0710" -> "Failed profile disabled"
+        "AI-0711" -> "Fallback success persisted"
+        "AI-0712" -> "Fallback candidate failure recorded"
         else -> "AI engine event recorded"
     }
 

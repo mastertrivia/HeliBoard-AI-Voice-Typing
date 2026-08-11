@@ -13,7 +13,10 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -53,15 +56,19 @@ fun AiVoiceTypingScreen(onClickBack: () -> Unit, onOpenProfiles: () -> Unit) {
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
             ) {
                 AiVoiceActiveStatusCard(engineConfig, runtimeState)
-                Preference(
-                    name = stringResource(R.string.ai_voice_microphone_permission),
-                    description = stringResource(if (microphoneGranted) R.string.ai_voice_microphone_permission_granted else R.string.ai_voice_microphone_permission_required),
-                    onClick = {
-                        if (!microphoneGranted && activity != null) {
-                            ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_RECORD_AUDIO)
-                        }
-                    },
-                )
+                CompositionLocalProvider(
+                    LocalContentColor provides if (microphoneGranted) LocalContentColor.current else MaterialTheme.colorScheme.error
+                ) {
+                    Preference(
+                        name = stringResource(R.string.ai_voice_microphone_permission),
+                        description = stringResource(if (microphoneGranted) R.string.ai_voice_microphone_permission_granted else R.string.ai_voice_microphone_permission_required),
+                        onClick = {
+                            if (!microphoneGranted && activity != null) {
+                                ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_RECORD_AUDIO)
+                            }
+                        },
+                    )
+                }
 
                 PreferenceCategory(stringResource(R.string.ai_voice_category_active_profile))
                 AiVoiceActiveProfileSelector(

@@ -58,8 +58,9 @@ class AiVoiceToolbarButton @JvmOverloads constructor(
         invalidate()
     }
 
-    fun setVisualState(recording: Boolean, processing: Boolean, elapsedMillis: Long) {
+    fun setVisualState(recording: Boolean, processing: Boolean, retry: Boolean, elapsedMillis: Long) {
         val nextState = when {
+            retry -> VisualState.RETRY
             processing -> VisualState.PROCESSING
             recording -> VisualState.RECORDING
             else -> VisualState.IDLE
@@ -88,16 +89,25 @@ class AiVoiceToolbarButton @JvmOverloads constructor(
                     contentDescription = context.getString(R.string.ai_voice_toolbar_processing)
                     loaderAnimator.start()
                 }
+                VisualState.RETRY -> {
+                    loaderAnimator.cancel()
+                    setImageResource(R.drawable.sym_keyboard_ai_voice_retry)
+                    drawable?.setTint(labelColor)
+                    isEnabled = true
+                    contentDescription = context.getString(R.string.ai_voice_toolbar_retry)
+                }
             }
         }
         invalidate()
     }
 
+    fun isShowingRetry(): Boolean = visualState == VisualState.RETRY
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         labelPaint.color = labelColor
         when (visualState) {
-            VisualState.IDLE, VisualState.RECORDING -> {
+            VisualState.IDLE, VisualState.RECORDING, VisualState.RETRY -> {
                 val label = if (visualState == VisualState.RECORDING) {
                     formatElapsed(elapsedMillis)
                 } else {
@@ -143,7 +153,7 @@ class AiVoiceToolbarButton @JvmOverloads constructor(
         return String.format(Locale.ROOT, "%02d:%02d", seconds / 60L, seconds % 60L)
     }
 
-    private enum class VisualState { IDLE, RECORDING, PROCESSING }
+    private enum class VisualState { IDLE, RECORDING, PROCESSING, RETRY }
 
     private companion object {
         const val LOADER_ROTATION_DURATION_MILLIS = 900L

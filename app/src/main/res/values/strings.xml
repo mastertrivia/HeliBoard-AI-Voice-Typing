@@ -362,6 +362,7 @@
     <string name="ai_voice_toolbar_start">Start AI Voice Typing</string>
     <string name="ai_voice_toolbar_stop">Stop AI Voice Typing</string>
     <string name="ai_voice_toolbar_processing">Processing AI Voice Typing</string>
+    <string name="ai_voice_toolbar_retry">AI Voice Typing is still processing. Tap to keep waiting</string>
     <string name="numpad" tools:keep="@string/numpad" translatable="false">@string/layout_numpad</string>
     <string name="dpad" tools:keep="@string/dpad" translatable="false">@string/layout_dpad</string>
     <string name="settings" tools:keep="@string/settings">Settings</string>
@@ -1381,6 +1382,7 @@ New dictionary:
     <string name="ai_voice_category_silence">Stop recording after silence</string>
     <string name="ai_voice_auto_send_after_silence">Auto-send after silence</string>
     <string name="ai_voice_auto_send_after_silence_summary">Send the current audio chunk and keep listening after the configured silence duration.</string>
+    <string name="ai_voice_auto_send_after_silence_warning">Very short silence intervals will send requests frequently and may exhaust API limits faster.</string>
     <string name="ai_voice_stop_microphone_after_prolonged_silence">Stop microphone after prolonged silence</string>
     <string name="ai_voice_silence_policy_save_failed">The silence policy could not be saved. The current session has not changed.</string>
     <string name="ai_voice_silence_duration">Silence duration</string>
