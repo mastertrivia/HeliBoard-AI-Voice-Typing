@@ -153,6 +153,9 @@ class ContinuousSpeechRecognizer(
             // Keep Voice logically active while transient provider/session
             // errors are being recovered. The next session is scheduled below.
             callback.onVoiceStateChanged(true)
+            // Same session-identity guard as onResults: drop any late duplicate
+            // callback from this finished session before the next one starts.
+            recognizerGeneration++
             // A no-match boundary reuses the completed recognizer for the next
             // session (Speechnotes m1640G / Speechkeys m3741u); all other session
             // errors take the destroy-and-recreate path (m1657v / m3734l).
@@ -196,6 +199,12 @@ class ContinuousSpeechRecognizer(
                 // Keep the microphone/Voice UI active across a natural pause.
                 callback.onVoiceStateChanged(true)
                 scheduleNoSpeechAutoStop()
+                // Invalidate this finished session now so late or re-delivered
+                // callbacks (which Android can emit when startListening() is
+                // called again quickly on the reused recognizer) can never
+                // commit the same segment a second time. Speechnotes/Speechkeys
+                // reset their session state on every restart (m1641H / m3741u).
+                recognizerGeneration++
                 // A natural speech boundary reuses the completed recognizer for
                 // the next segment (Speechnotes m1640G / Speechkeys m3741u).
                 scheduleRestart(RESTART_AFTER_RESULTS_MS, reuseRecognizer = true)
@@ -420,10 +429,15 @@ class ContinuousSpeechRecognizer(
                 if (reuseRecognizer && recognizer != null) {
                     // Natural speech boundary (onResults / no-match): Speechnotes
                     // and Speechkeys reuse the completed recognizer instance and
-                    // simply call startListening() again (m1640G / m3741u). The
-                    // same listener/generation stays valid for the continuous
-                    // dictation session, so late callbacks from the finished
-                    // segment still belong to the session and remain harmless.
+                    // simply call startListening() again (m1640G / m3741u), while
+                    // resetting their session state (m1641H / m3741u) so the old
+                    // session's callbacks are ignored. Mirror that here by
+                    // attaching a fresh listener with a new generation to the same
+                    // recognizer: late or re-delivered results from the finished
+                    // segment are dropped, and each segment is committed exactly
+                    // once (fixes duplicate text + recognizer crash on restart).
+                    recognizerGeneration++
+                    recognizer?.setRecognitionListener(newRecognitionListener(recognizerGeneration))
                     beginRecognition()
                 } else {
                     // Hard/session error: destroy and recreate the recognizer,
