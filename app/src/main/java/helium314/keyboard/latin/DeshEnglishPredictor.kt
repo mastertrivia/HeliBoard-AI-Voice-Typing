@@ -4,6 +4,7 @@
  */
 package helium314.keyboard.latin
 
+import helium314.keyboard.latin.common.ComposedData
 import helium314.keyboard.latin.settings.SettingsValuesForSuggestion
 import helium314.keyboard.latin.utils.SuggestionResults
 
@@ -41,7 +42,7 @@ object DeshEnglishPredictor {
             false,
         )
         for (suggestion in suggestions) {
-            if (suggestion.mKind == SuggestedWords.SuggestedWordInfo.KIND_TYPED) continue
+            if (suggestion.kind == SuggestedWords.SuggestedWordInfo.KIND_TYPED) continue
             results.add(suggestion)
         }
         return results.takeIf { it.isNotEmpty() }

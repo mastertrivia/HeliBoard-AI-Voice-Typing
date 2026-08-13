@@ -6,6 +6,8 @@
 
 package helium314.keyboard.latin.dictionary;
 
+import android.content.res.AssetManager;
+
 import com.android.inputmethod.latin.BinaryDictionary;
 
 import helium314.keyboard.latin.NgramContext;
@@ -41,6 +43,21 @@ public final class ReadOnlyBinaryDictionary extends Dictionary {
 
     public boolean isValidDictionary() {
         return mBinaryDictionary.isValidDictionary();
+    }
+
+    /**
+     * Loads a trigram/language model through the underlying binary dictionary.
+     * This is the entry point Desh uses to load its English LM asset.
+     */
+    public boolean loadTrigramLanguageModel(final String path, final AssetManager assetManager) {
+        if (mLock.readLock().tryLock()) {
+            try {
+                return mBinaryDictionary.loadTrigramLanguageModel(path, assetManager);
+            } finally {
+                mLock.readLock().unlock();
+            }
+        }
+        return false;
     }
 
     @Override

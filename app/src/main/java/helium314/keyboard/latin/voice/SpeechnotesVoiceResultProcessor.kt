@@ -116,6 +116,6 @@ object SpeechnotesVoiceResultProcessor {
     }
 
     private fun endsWithSentenceOrClosingPunctuation(text: String): Boolean {
-        return text.lastOrNull() in charArrayOf('.', ',', '?', '!', ':', ';', ')', ']', '}', '"', '\'')
+        return text.lastOrNull()?.let { it in charArrayOf('.', ',', '?', '!', ':', ';', ')', ']', '}', '"', '\'') } == true
     }
 }

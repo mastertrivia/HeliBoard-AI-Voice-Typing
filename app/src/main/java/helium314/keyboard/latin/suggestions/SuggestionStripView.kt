@@ -350,17 +350,18 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private fun updateVoiceStripHeight(height: Int) {
         val base = baseVoiceStripHeight()
         val target = height.coerceAtLeast(base)
-        val params = parent?.layoutParams ?: return
+        val parent = (parent as? ViewGroup) ?: return
+        val params = parent.layoutParams ?: return
         if (params.height != target) {
             params.height = target
-            parent?.layoutParams = params
+            parent.layoutParams = params
         }
         val own = layoutParams
         if (own != null && own.height != target) {
             own.height = target
             layoutParams = own
         }
-        parent?.requestLayout()
+        parent.requestLayout()
         requestLayout()
     }
 

@@ -74,6 +74,18 @@ class SingleDictionaryFacilitator(private val dict: Dictionary) : DictionaryFaci
         return suggestionResults
     }
 
+    override fun getUserHistorySuggestions(
+        composedData: ComposedData, ngramContext: NgramContext, keyboard: Keyboard,
+        settingsValuesForSuggestion: SettingsValuesForSuggestion, sessionId: Int, inputStyle: Int
+    ): List<SuggestedWords.SuggestedWordInfo> {
+        if (dict.mDictType != Dictionary.TYPE_USER_HISTORY) return emptyList()
+        return dict.getSuggestions(
+            composedData, ngramContext, keyboard.proximityInfo.nativeProximityInfo,
+            settingsValuesForSuggestion, sessionId, 1f,
+            floatArrayOf(Dictionary.NOT_A_WEIGHT_OF_LANG_MODEL_VS_SPATIAL_MODEL)
+        ) ?: emptyList()
+    }
+
     fun getWordProperty(word: String): WordProperty? = dict.getWordProperty(word, false)
 
     // ------------ dummy functionality ----------------
