@@ -65,9 +65,10 @@ class KeyboardParser(private val params: KeyboardParams, private val context: Co
         val heightRescale: Float
         if (params.mId.element.isBottomRow) {
             heightRescale = 4f
-            // to have same height as alpha keyboard we act as if we had the default number of rows
-            val virtualRows = if (Settings.getValues().mShowsNumberRow) 5 else 4 // determine from Settings, because it's not actually in params for bottom rows
-            // params rescale is not perfect, especially mTopPadding may cause 1 pixel offsets because it's already been converted to int once
+            // Bottom-row key height must match the currently selected MAIN layout. The old
+            // implementation used a global 4/5-row assumption, which made changing the number
+            // row or editing one language layout alter the perceived row height of other layouts.
+            val virtualRows = getMainKeyboardRowCount()
             params.mOccupiedHeight /= virtualRows
             params.mBaseHeight /= virtualRows
             params.mTopPadding = (params.mTopPadding.toDouble() / virtualRows).roundToInt()
@@ -101,12 +102,15 @@ class KeyboardParser(private val params: KeyboardParams, private val context: Co
         }
 
         val numberRow = getNumberRow()
-        addNumberRowOrPopupKeys(baseKeys, numberRow)
+        val showNumberRow = shouldShowNumberRow(element)
+        addNumberRowOrPopupKeys(baseKeys, numberRow, showNumberRow)
         if (element.isAlphabet)
             addSymbolPopupKeys(baseKeys)
-        if (element.isAlphaOrSymbol && params.mId.numberRowEnabled) {
+        if (showNumberRow) {
             val newLabelFlags = defaultLabelFlags or
                     if (Settings.getValues().mShowNumberRowHints) 0 else Key.LABEL_FLAGS_DISABLE_HINT_LABEL
+            // The number row belongs to this layout instance only. It is never injected into
+            // Hindi MAIN layouts and is independently controlled for SYMBOLS.
             baseKeys.add(0, numberRow.mapTo(mutableListOf()) { it.copy(newLabelFlags = newLabelFlags) })
         }
         if (!params.mAllowRedundantPopupKeys)
@@ -225,6 +229,38 @@ class KeyboardParser(private val params: KeyboardParams, private val context: Co
     }
 
     /**
+     * Number-row policy is intentionally scoped to the active layout instance.
+     *
+     * - English/other alphabetic layouts follow the global Number row preference.
+     * - Hindi (Devanagari) layouts never inherit the global Number row preference.
+     * - Symbols use their own dedicated "number row in symbols" preference.
+     *
+     * This prevents edits/settings for one layout from changing the row structure of another.
+     */
+    private fun shouldShowNumberRow(element: KeyboardElement): Boolean = when {
+        element == KeyboardElement.SYMBOLS || element == KeyboardElement.SYMBOLS_SHIFTED ->
+            params.mId.numberRowInSymbols
+        element.isAlphabet ->
+            params.mId.numberRowEnabled && !isHindiDevanagariSubtype()
+        else -> false
+    }
+
+    private fun isHindiDevanagariSubtype(): Boolean =
+        params.mId.subtype.locale.language == "hi" &&
+            (params.mId.subtype.locale.script().isBlank() || params.mId.subtype.locale.script() == "Deva")
+
+    /**
+     * Compute the number of rows used by the MAIN layout itself, plus its own optional number
+     * row. This keeps bottom-row sizing in sync with custom layouts with any number of rows.
+     */
+    private fun getMainKeyboardRowCount(): Int {
+        val mainKeys = LayoutParser.parseLayout(LayoutType.MAIN, params, context)
+        val globalNumberRow = Settings.getValues().mShowsNumberRow
+        val mainNumberRowEnabled = globalNumberRow && !isHindiDevanagariSubtype()
+        return (mainKeys.size + if (mainNumberRowEnabled) 1 else 0).coerceAtLeast(1)
+    }
+
+    /**
      *  adds / removes keys to the bottom row
      *  assumes a close-to-default bottom row consisting only of functional keys
      *  does nothing if not isAlphaOrSymbolKeyboard or assumptions not met
@@ -270,13 +306,15 @@ class KeyboardParser(private val params: KeyboardParams, private val context: Co
         return functionalKeysLeft to functionalKeysRight
     }
 
-    private fun addNumberRowOrPopupKeys(baseKeys: MutableList<MutableList<KeyData>>, numberRow: MutableList<KeyData>) {
-        if (!params.mId.numberRowEnabled && params.mId.numberRowInSymbols && params.mId.element == KeyboardElement.SYMBOLS) {
-            // replace first symbols row with number row, but use the labels as popupKeys
-            val numberRowCopy = numberRow.toMutableList()
-            numberRowCopy.forEachIndexed { index, keyData -> keyData.popup.symbol = baseKeys[0].getOrNull(index)?.label }
-            baseKeys[0] = numberRowCopy
-        } else if (!params.mId.numberRowEnabled && params.mId.element.isAlphabet && !hasBuiltInNumbers()) {
+    private fun addNumberRowOrPopupKeys(
+        baseKeys: MutableList<MutableList<KeyData>>,
+        numberRow: MutableList<KeyData>,
+        showNumberRow: Boolean,
+    ) {
+        // Symbols have their own number-row preference. Do not replace/hide a symbols row when
+        // the global alphabet number-row setting changes. The actual number row, when enabled,
+        // is inserted independently above the symbols layout.
+        if (!showNumberRow && params.mId.element.isAlphabet && !isHindiDevanagariSubtype() && !hasBuiltInNumbers()) {
             if (baseKeys[0].any { it.popup.main != null || !it.popup.relevant.isNullOrEmpty() } // first row of baseKeys has any layout popup key
                 && params.mPopupKeyHintOrder.let {
                     val layout = it.indexOf(POPUP_KEYS_LAYOUT)

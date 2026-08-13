@@ -15,3 +15,7 @@
 
 # Compile-time-only annotations referenced by transitive dependencies (e.g. Google Tink)
 -dontwarn com.google.errorprone.annotations.**
+
+# Desh Hindi predictor JNI bridge: exported JNI names depend on this exact class/method names.
+-keep class com.deshkeyboard.suggestions.nativesuggestions.nativepredictor.NativePredictor { *; }
+-keep class helium314.keyboard.latin.DeshHindiPredictor { *; }

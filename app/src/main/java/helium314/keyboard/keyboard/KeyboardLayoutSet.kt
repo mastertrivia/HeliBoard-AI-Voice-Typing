@@ -116,6 +116,7 @@ class KeyboardLayoutSet internal constructor(private val mContext: Context, priv
         var deviceLocked = Settings.getValues().mIsLocked
         var numberRowEnabled = false
         var numberRowInSymbols = false
+        var deshHindiVowelDiacriticMode = false
         var languageSwitchKeyEnabled = false
         var emojiKeyEnabled = false
         var oneHandedModeEnabled = false
@@ -171,6 +172,11 @@ class KeyboardLayoutSet internal constructor(private val mContext: Context, priv
 
         fun setNumberRowInSymbolsEnabled(enabled: Boolean): Builder {
             params.numberRowInSymbols = enabled
+            return this
+        }
+        
+        fun setDeshHindiVowelDiacriticMode(enabled: Boolean): Builder {
+            params.deshHindiVowelDiacriticMode = enabled
             return this
         }
 

@@ -32,6 +32,7 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InlineSuggestion;
 import android.view.inputmethod.InlineSuggestionsRequest;
 import android.view.inputmethod.InlineSuggestionsResponse;
+import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodSubtype;
 
 import helium314.keyboard.accessibility.AccessibilityUtils;
@@ -70,6 +71,8 @@ import helium314.keyboard.latin.settings.Settings;
 import helium314.keyboard.latin.settings.SettingsValues;
 import helium314.keyboard.latin.suggestions.SuggestionStripView;
 import helium314.keyboard.latin.suggestions.SuggestionStripViewAccessor;
+import helium314.keyboard.latin.voice.ContinuousSpeechRecognizer;
+import helium314.keyboard.latin.voice.SpeechnotesVoiceResultProcessor;
 import helium314.keyboard.latin.touchinputconsumer.GestureConsumer;
 import helium314.keyboard.latin.utils.ColorUtilKt;
 import helium314.keyboard.latin.utils.FloatingKeyboardUtils;
@@ -144,8 +147,17 @@ public class LatinIME extends InputMethodService implements
     private SuggestionStripView mSuggestionStripView;
     @Nullable
     private AiVoiceSessionController mAiVoiceSessionController;
+    @Nullable
+    private ContinuousSpeechRecognizer mContinuousSpeechRecognizer;
 
     private RichInputMethodManager mRichImm;
+    /**
+     * Whether the dedicated "देश हिंदी keyboard" should display vowel diacritics
+     * (matras) instead of independent vowels. This is deliberately kept outside
+     * SettingsValues because it follows the text immediately before the cursor.
+     */
+    private boolean mDeshHindiVowelDiacriticMode = false;
+
     final KeyboardSwitcher mKeyboardSwitcher;
     private final SubtypeState mSubtypeState = new SubtypeState((InputMethodSubtype subtype) -> { switchToSubtype(subtype); return Unit.INSTANCE; });
     private final StatsUtilsManager mStatsUtilsManager;
@@ -703,6 +715,10 @@ public class LatinIME extends InputMethodService implements
 
     @Override
     public void onDestroy() {
+        if (mContinuousSpeechRecognizer != null) {
+            mContinuousSpeechRecognizer.destroy();
+            mContinuousSpeechRecognizer = null;
+        }
         if (mAiVoiceSessionController != null) {
             mAiVoiceSessionController.onImeDestroyed();
             mAiVoiceSessionController = null;
@@ -806,6 +822,13 @@ public class LatinIME extends InputMethodService implements
 
     @Override
     public void onFinishInputView(final boolean finishingInput) {
+        // Collapsing/hiding the keyboard must end continuous Voice immediately.
+        // Do this here (rather than waiting for onFinishInput()) because the
+        // input connection may remain alive while the IME view itself is hidden.
+        if (mContinuousSpeechRecognizer != null
+                && mContinuousSpeechRecognizer.isListening()) {
+            mContinuousSpeechRecognizer.stop();
+        }
         StatsUtils.onFinishInputView();
         mHandler.onFinishInputView(finishingInput);
         mStatsUtilsManager.onFinishInputView();
@@ -815,8 +838,53 @@ public class LatinIME extends InputMethodService implements
 
     @Override
     public void onFinishInput() {
+        if (mContinuousSpeechRecognizer != null)
+            mContinuousSpeechRecognizer.stop();
         mHandler.onFinishInput();
         BackgroundGatheringCache.saveOrClear(this);
+    }
+
+    public boolean isDeshHindiVowelDiacriticMode() {
+        return mDeshHindiVowelDiacriticMode;
+    }
+
+    private boolean isDeshHindiSubtype() {
+        return "hi".equals(mRichImm.getCurrentSubtype().locale.getLanguage())
+                && "desh_hindi".equals(mRichImm.getCurrentSubtype().mainLayoutName);
+    }
+
+    private static boolean isDevanagariConsonant(final int codePoint) {
+        return (codePoint >= 0x0915 && codePoint <= 0x0939)
+                || (codePoint >= 0x0958 && codePoint <= 0x095F);
+    }
+
+    /**
+     * Desh-style Hindi switches the vowel keys to matras immediately after a
+     * consonant. We derive the state from the actual text before the cursor so
+     * backspace, cursor movement, paste and autocorrection all stay coherent.
+     */
+    private boolean computeDeshHindiVowelDiacriticMode() {
+        if (!isDeshHindiSubtype())
+            return false;
+        try {
+            final CharSequence beforeCursor = mInputLogic.mConnection.getTextBeforeCursor(8, 0);
+            if (beforeCursor == null || beforeCursor.length() == 0)
+                return false;
+            final int codePoint = Character.codePointBefore(beforeCursor, beforeCursor.length());
+            return isDevanagariConsonant(codePoint);
+        } catch (Throwable t) {
+            // Never let contextual key rendering break the IME if an editor rejects the query.
+            return false;
+        }
+    }
+
+    private void updateDeshHindiVowelDiacriticMode(final boolean reloadIfChanged) {
+        final boolean newMode = computeDeshHindiVowelDiacriticMode();
+        if (newMode == mDeshHindiVowelDiacriticMode)
+            return;
+        mDeshHindiVowelDiacriticMode = newMode;
+        if (reloadIfChanged && mKeyboardSwitcher.getMainKeyboardView() != null)
+            mHandler.post(mKeyboardSwitcher::reloadMainKeyboard);
     }
 
     @Override
@@ -839,6 +907,13 @@ public class LatinIME extends InputMethodService implements
         mRichImm.onSubtypeChanged(subtype);
         mInputLogic.onSubtypeChanged(SubtypeLocaleUtils.getCombiningRulesExtraValue(subtype),
                 mSettings.getCurrent());
+        // Voice follows the active HeliBoard language even when the user
+        // changes subtype while continuous Voice is already running.
+        if (mContinuousSpeechRecognizer != null
+                && mContinuousSpeechRecognizer.isListening()) {
+            mContinuousSpeechRecognizer.updateLocale(mRichImm.getCurrentSubtypeLocale());
+        }
+        mDeshHindiVowelDiacriticMode = computeDeshHindiVowelDiacriticMode();
         loadKeyboard();
         if (hasSuggestionStripView()) {
             mSuggestionStripView.setRtl(mRichImm.getCurrentSubtype().isRtlSubtype());
@@ -876,6 +951,7 @@ public class LatinIME extends InputMethodService implements
         // also wouldn't be consuming gesture data.
         mGestureConsumer = GestureConsumer.NULL_GESTURE_CONSUMER;
         mRichImm.refreshSubtypeCaches();
+        mDeshHindiVowelDiacriticMode = computeDeshHindiVowelDiacriticMode();
         final KeyboardSwitcher switcher = mKeyboardSwitcher;
 
         // If we are starting input in a different text field from before, we'll have to reload
@@ -1097,6 +1173,7 @@ public class LatinIME extends InputMethodService implements
                 return;
             mKeyboardSwitcher.requestUpdatingShiftState(getCurrentAutoCapsState(), getCurrentRecapitalizeState());
         }
+        updateDeshHindiVowelDiacriticMode(true);
     }
 
     /**
@@ -1444,7 +1521,14 @@ public class LatinIME extends InputMethodService implements
         if (mAiVoiceSessionController != null)
             mAiVoiceSessionController.onInputInteraction();
         if (KeyCode.VOICE_INPUT == event.getKeyCode()) {
-            mRichImm.switchToShortcutIme(this);
+            toggleContinuousVoiceInput();
+            return;
+        }
+        // Any normal keyboard interaction ends continuous voice mode. Natural
+        // speech pauses are handled inside ContinuousSpeechRecognizer and do
+        // not reach this path.
+        if (mContinuousSpeechRecognizer != null && mContinuousSpeechRecognizer.isListening()) {
+            mContinuousSpeechRecognizer.stop();
         }
         final InputTransaction completeInputTransaction =
                 mInputLogic.onCodeInput(mSettings.getCurrent(), event,
@@ -1452,6 +1536,88 @@ public class LatinIME extends InputMethodService implements
                         mKeyboardSwitcher.getCurrentKeyboardScript(), mHandler);
         updateStateAfterInputTransaction(completeInputTransaction);
         mKeyboardSwitcher.onEvent(event, getCurrentAutoCapsState(), getCurrentRecapitalizeState());
+    }
+
+    private void toggleContinuousVoiceInput() {
+        if (mContinuousSpeechRecognizer != null && mContinuousSpeechRecognizer.isListening()) {
+            mContinuousSpeechRecognizer.stop();
+            return;
+        }
+        if (mContinuousSpeechRecognizer == null) {
+            mContinuousSpeechRecognizer = new ContinuousSpeechRecognizer(this,
+                    new ContinuousSpeechRecognizer.Callback() {
+                        @Override
+                        public void onVoicePartialResult(String text) {
+                            if (mSuggestionStripView == null) return;
+                            if (!mSuggestionStripView.isVoiceTranscriptionBufferActive()) {
+                                mSuggestionStripView.showVoiceTranscriptionBuffer();
+                            }
+                            mSuggestionStripView.setVoiceTranscriptionText(text);
+                        }
+
+                        @Override
+                        public void onVoiceFinalResult(String text) {
+                            // Speechnotes behavior: a natural pause finalizes the
+                            // current recognition segment and commits it immediately
+                            // while the microphone remains ON. The recognizer then
+                            // starts the next segment automatically.
+                            if (text == null || text.isEmpty()) return;
+                            commitVoiceText(text);
+                            if (mSuggestionStripView != null) {
+                                if (!mSuggestionStripView.isVoiceTranscriptionBufferActive()) {
+                                    mSuggestionStripView.showVoiceTranscriptionBuffer();
+                                }
+                                mSuggestionStripView.setVoiceTranscriptionText("Listening…");
+                            }
+                        }
+
+                        @Override
+                        public void onVoiceStoppedWithBuffer(String text) {
+                            // Only an unfinished partial segment can remain at an
+                            // explicit Stop; completed pause-separated segments have
+                            // already been committed while Voice remained active.
+                            if (text != null && !text.isEmpty()) {
+                                commitVoiceText(text);
+                            }
+                        }
+
+                        @Override
+                        public void onVoiceStateChanged(boolean listening) {
+                            if (mSuggestionStripView == null) return;
+                            if (listening) {
+                                if (!mSuggestionStripView.isVoiceTranscriptionBufferActive()) {
+                                    mSuggestionStripView.showVoiceTranscriptionBuffer();
+                                }
+                            } else {
+                                mSuggestionStripView.hideVoiceTranscriptionBuffer();
+                            }
+                        }
+
+                        @Override
+                        public void onVoiceError(int errorCode) {
+                            // The controller performs bounded recovery for transient errors.
+                        }
+                    });
+        }
+        if (mSuggestionStripView != null) {
+            mSuggestionStripView.showVoiceTranscriptionBuffer();
+        }
+        mContinuousSpeechRecognizer.start(mRichImm.getCurrentSubtypeLocale());
+    }
+
+    private void commitVoiceText(@NonNull String text) {
+        final InputConnection ic = getCurrentInputConnection();
+        if (ic == null) return;
+        final SpeechnotesVoiceResultProcessor.ProcessedResult processed =
+                SpeechnotesVoiceResultProcessor.process(
+                        text, mRichImm.getCurrentSubtypeLocale());
+        if (processed.getText().isEmpty()) return;
+        ic.commitText(processed.getText() +
+                (processed.getAppendTrailingSpace() ? " " : ""), 1);
+        if (mInputLogic != null) {
+            mInputLogic.restartSuggestionsOnWordTouchedByCursor(
+                    mSettings.getCurrent(), mKeyboardSwitcher.getCurrentKeyboardScript());
+        }
     }
 
     public void onTextInput(@Nullable String rawText) {
@@ -1527,6 +1693,9 @@ public class LatinIME extends InputMethodService implements
     private void setSuggestedWords(final SuggestedWords suggestedWords) {
         final SettingsValues currentSettingsValues = mSettings.getCurrent();
         mInputLogic.setSuggestedWords(suggestedWords);
+        if (mSuggestionStripView != null && mSuggestionStripView.isVoiceTranscriptionBufferActive()) {
+            return;
+        }
         // TODO: Modify this when we support suggestions with hard keyboard
         if (!hasSuggestionStripView()) {
             return;
@@ -1684,6 +1853,7 @@ public class LatinIME extends InputMethodService implements
         }
         if (inputTransaction.didAffectContents()) {
             mSubtypeState.setCurrentSubtypeHasBeenUsed();
+            updateDeshHindiVowelDiacriticMode(true);
         }
     }
 

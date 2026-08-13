@@ -7,6 +7,7 @@
 package com.android.inputmethod.latin;
 
 import android.text.TextUtils;
+import android.content.res.AssetManager;
 import helium314.keyboard.latin.utils.ChecksumCalculator;
 import helium314.keyboard.latin.utils.Log;
 import android.util.SparseArray;
@@ -169,6 +170,8 @@ public final class BinaryDictionary extends Dictionary {
     private static native int getMaxProbabilityOfExactMatchesNative(long dict, int[] word);
     private static native int getNgramProbabilityNative(long dict, int[][] prevWordCodePointArrays,
             boolean[] isBeginningOfSentenceArray, int[] word);
+    // Desh English compatibility: exact native LM-loading entry point present in Desh.
+    private static native boolean loadTrigramLanguageModelNative(long dict, String path, Object assetManager);
     private static native void getWordPropertyNative(long dict, int[] word,
             boolean isBeginningOfSentence, int[] outCodePoints, boolean[] outFlags,
             int[] outProbabilityInfo, ArrayList<int[][]> outNgramPrevWordsArray,
@@ -360,6 +363,18 @@ public final class BinaryDictionary extends Dictionary {
 
     public boolean isValidNgram(final NgramContext ngramContext, final String word) {
         return getNgramProbability(ngramContext, word) != NOT_A_PROBABILITY;
+    }
+
+    /**
+     * Loads the Desh English trigram/language model using the same native entry point
+     * exposed by Desh's BinaryDictionary. This is intentionally a thin bridge: no
+     * HeliBoard scoring or conversion of the model is performed here.
+     */
+    public boolean loadTrigramLanguageModel(final String path, final AssetManager assetManager) {
+        if (!isValidDictionary()) {
+            return false;
+        }
+        return loadTrigramLanguageModelNative(mNativeDict, path, assetManager);
     }
 
     public int getNgramProbability(final NgramContext ngramContext, final String word) {

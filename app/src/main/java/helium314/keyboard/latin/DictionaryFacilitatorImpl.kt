@@ -29,6 +29,8 @@ import helium314.keyboard.latin.dictionary.ExpandableBinaryDictionary
 import helium314.keyboard.latin.dictionary.UserBinaryDictionary
 import helium314.keyboard.latin.permissions.PermissionsUtil
 import helium314.keyboard.latin.personalization.UserHistoryDictionary
+import helium314.keyboard.latin.personalization.DeshStyleLearningStore
+import helium314.keyboard.latin.personalization.DeshEnglishLearningManager
 import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.settings.SettingsValuesForSuggestion
 import helium314.keyboard.latin.utils.Log
@@ -324,6 +326,14 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
                 preferredGroup, ngramContextForCurrentWord, currentWord,
                 wasCurrentWordAutoCapitalized, timeStampInSeconds.toInt(), blockPotentiallyOffensive
             )
+            // Keep a separate fast learner so a newly accepted word is searchable immediately,
+            // without waiting for UserHistoryDictionary consolidation or the personal-dictionary threshold.
+            if (preferredGroup.locale.language == "en") runCatching {
+                DeshEnglishLearningManager.learn(preferredGroup.locale, ngramContextForCurrentWord, currentWord, timeStampInSeconds.toInt())
+            }.onFailure { Log.w(TAG, "Desh English learned-dictionary update failed", it) }
+            else runCatching {
+                DeshStyleLearningStore.get()?.record(preferredGroup.locale, currentWord, ngramContextForCurrentWord)
+            }.onFailure { Log.w(TAG, "Immediate learner update failed", it) }
             ngramContextForCurrentWord = ngramContextForCurrentWord.getNextNgramContext(WordInfo(currentWord))
 
             // remove manually entered blacklisted words from blacklist for likely matching languages
@@ -482,6 +492,20 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
     }
 
     // TODO: Revise the way to fusion suggestion results.
+    override fun getUserHistorySuggestions(
+        composedData: ComposedData, ngramContext: NgramContext, keyboard: Keyboard,
+        settingsValuesForSuggestion: SettingsValuesForSuggestion, sessionId: Int, inputStyle: Int
+    ): List<SuggestedWordInfo> {
+        val history = currentlyPreferredDictionaryGroup
+            .getSubDict(Dictionary.TYPE_USER_HISTORY) ?: return emptyList()
+        val weight = dictionaryGroups.firstOrNull()?.getWeightForLocale(dictionaryGroups, composedData.mIsBatchMode) ?: 1f
+        val lmWeight = floatArrayOf(Dictionary.NOT_A_WEIGHT_OF_LANG_MODEL_VS_SPATIAL_MODEL)
+        return history.getSuggestions(
+            composedData, ngramContext, keyboard.proximityInfo.nativeProximityInfo,
+            settingsValuesForSuggestion, sessionId, weight, lmWeight
+        ) ?: emptyList()
+    }
+
     override fun getSuggestionResults(
         composedData: ComposedData, ngramContext: NgramContext, keyboard: Keyboard,
         settingsValuesForSuggestion: SettingsValuesForSuggestion, sessionId: Int, inputStyle: Int
@@ -591,6 +615,7 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
     override fun clearUserHistoryDictionary(context: Context) {
         for (dictionaryGroup in dictionaryGroups) {
             dictionaryGroup.getSubDict(Dictionary.TYPE_USER_HISTORY)?.clear()
+            runCatching { DeshStyleLearningStore.get(context).clear(dictionaryGroup.locale) }
         }
     }
 

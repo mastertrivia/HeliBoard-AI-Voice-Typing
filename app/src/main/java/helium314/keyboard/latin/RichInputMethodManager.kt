@@ -126,16 +126,6 @@ class RichInputMethodManager private constructor() {
         scope.launch { updateShortcutIme() }
     }
 
-    fun switchToShortcutIme(inputMethodService: InputMethodService) = scope.launch {
-        val imiId = shortcuts.firstOrNull()?.imi?.id ?: return@launch
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            inputMethodService.switchInputMethod(imiId, shortcuts.first().subtype)
-        } else {
-            val token = inputMethodService.window.window?.attributes?.token ?: return@launch
-            @Suppress("Deprecation") imm.setInputMethodAndSubtype(token, imiId, shortcuts.first().subtype)
-        }
-    }
-
     // todo: is shortcutIme only voice input, or can it be something else?
     //  if always voice input, rename it and other things like mHasShortcutKey
     private fun updateShortcutIme() {

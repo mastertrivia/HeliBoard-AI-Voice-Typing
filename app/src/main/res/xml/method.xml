@@ -480,6 +480,16 @@
         android:imeSubtypeExtraValue="KeyboardLayoutSet=MAIN:hindi_phonetic,EmojiCapable"
         android:isAsciiCapable="false"
     />
+    <!-- Dedicated Desh-style Hindi keyboard. Kept separate from the built-in Hindi layouts. -->
+    <subtype android:icon="@drawable/ic_ime_switcher"
+        android:label="@string/subtype_desh_hindi_keyboard"
+        android:subtypeId="0x6d5a9b41"
+        android:imeSubtypeLocale="hi"
+        android:languageTag="hi"
+        android:imeSubtypeMode="keyboard"
+        android:imeSubtypeExtraValue="KeyboardLayoutSet=MAIN:desh_hindi,NoNumberRow,NoShiftKey,NoShiftProximityCorrection,EmojiCapable"
+        android:isAsciiCapable="false"
+    />
     <!-- This Hinglish keyboard is a preliminary layout.
            This isn't based on the final specification.
            Was disabled because there is no LM yet, and this layout does not offer anything different. -->

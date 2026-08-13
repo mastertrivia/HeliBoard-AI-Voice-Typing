@@ -27,6 +27,8 @@ import helium314.keyboard.latin.utils.BackgroundGatheringCache
 import helium314.keyboard.latin.utils.SuggestionResults
 import helium314.keyboard.latin.utils.WordData
 import helium314.keyboard.latin.utils.useBackgroundGathering
+import helium314.keyboard.latin.personalization.DeshStyleLearningStore
+import helium314.keyboard.latin.personalization.DeshEnglishLearningManager
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
@@ -75,10 +77,87 @@ class Suggest(private val mDictionaryFacilitator: DictionaryFacilitator) {
                       isCorrectionEnabled: Boolean, sequenceNumber: Int): SuggestedWords {
         val typedWordString = wordComposer.typedWord
         val resultsArePredictions = !wordComposer.isComposingWord
-        val suggestionResults = if (typedWordString.isEmpty())
+        val deshResults = when {
+            keyboard.mId.subtype.mainLayoutName == "desh_hindi" -> {
+                val words = DeshHindiPredictor.getSuggestions(
+                    typedWordString, ngramContext, typedWordString.isEmpty()
+                )
+                words?.takeIf { it.isNotEmpty() }?.let {
+                    DeshHindiPredictor.toSuggestionResults(it, ngramContext, typedWordString.isEmpty())
+                }
+            }
+            // Phase 13C: English prefix queries are sourced exclusively from the original
+            // Desh English dictionary. The English LM and learned-word path are deliberately
+            // not active yet; if the Desh resource cannot answer, normal HeliBoard is retained.
+            mDictionaryFacilitator.mainLocale.language == "en" && typedWordString.isNotEmpty() -> {
+                DeshEnglishPredictor.getSuggestions(
+                    wordComposer.composedDataSnapshot,
+                    ngramContext,
+                    settingsValuesForSuggestion,
+                    SESSION_ID_TYPING,
+                    inputStyleIfNotPrediction,
+                )
+            }
+            else -> null
+        }
+        val suggestionResults = deshResults ?: if (typedWordString.isEmpty())
                 getNextWordSuggestions(ngramContext, keyboard, inputStyleIfNotPrediction, settingsValuesForSuggestion)
             else mDictionaryFacilitator.getSuggestionResults(wordComposer.composedDataSnapshot, ngramContext, keyboard,
                 settingsValuesForSuggestion, SESSION_ID_TYPING, inputStyleIfNotPrediction)
+
+        // Phase 13O: Desh English uses a dedicated learned dictionary. Keep it separate from
+        // HeliBoard's ordinary UserHistoryDictionary so the Desh-English learner has its own
+        // persistent binary dictionary and native scoring path.
+        if (mDictionaryFacilitator.mainLocale.language == "en" && deshResults != null) runCatching {
+            val learned = DeshEnglishLearningManager.suggestions(
+                mDictionaryFacilitator.currentLocale, wordComposer.composedDataSnapshot, ngramContext,
+                settingsValuesForSuggestion, SESSION_ID_TYPING
+            )
+            // Merge through SuggestionResults.add() so its capacity is respected.
+            // Replace an existing candidate with the learned/native-scored version rather
+            // than allowing two entries for the same word.
+            for (candidate in learned) {
+                val existing = suggestionResults.firstOrNull { it.mWord == candidate.mWord }
+                if (existing != null) suggestionResults.remove(existing)
+                suggestionResults.add(candidate)
+                if (suggestionResults.mRawSuggestions != null) {
+                    suggestionResults.mRawSuggestions.removeAll { it.mWord == candidate.mWord }
+                    suggestionResults.mRawSuggestions.add(candidate)
+                }
+            }
+        }.onFailure { Log.w("Suggest", "English Desh learned-dictionary suggestions failed", it) }
+
+        // Desh-style immediate personal learning: learned words are merged even when the Desh
+        // native predictor is active, so a word accepted once can become a strong candidate immediately.
+        // Do not mix the temporary HeliBoard learning approximation into English while the
+        // real Desh English learning path is being transplanted. Other languages retain it.
+        if (mDictionaryFacilitator.mainLocale.language != "en") runCatching {
+            val learner = DeshStyleLearningStore.get()
+            if (learner != null) {
+                val locale = mDictionaryFacilitator.currentLocale
+                val learned = if (typedWordString.isEmpty()) {
+                    learner.nextWordCandidates(locale, ngramContext, 4)
+                } else {
+                    learner.prefixCandidates(locale, typedWordString, 4)
+                }
+                for (candidate in learned) {
+                    val existing = suggestionResults.firstOrNull { it.mWord == candidate.word }
+                    if (existing != null) suggestionResults.remove(existing)
+                    suggestionResults.add(
+                        SuggestedWordInfo(
+                            candidate.word,
+                            ngramContext.extractPrevWordsContext(),
+                            candidate.score,
+                            if (typedWordString.isEmpty()) SuggestedWordInfo.KIND_PREDICTION else SuggestedWordInfo.KIND_COMPLETION,
+                            Dictionary.DICTIONARY_USER_TYPED,
+                            SuggestedWordInfo.NOT_AN_INDEX,
+                            SuggestedWordInfo.NOT_A_CONFIDENCE
+                        )
+                    )
+                }
+            }
+        }.onFailure { Log.w("Suggest", "Immediate personal learning failed", it) }
+
         val trailingSingleQuotesCount = StringUtils.getTrailingSingleQuotesCount(typedWordString)
         val capsMode = getCapsModeForTyping(wordComposer, keyboard)
         val suggestionsContainer = ArrayList(suggestionResults)

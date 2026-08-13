@@ -95,6 +95,9 @@ public final class Constants {
             /** Overrides the general "localized number row" setting */
             public static final String LOCALIZED_NUMBER_ROW = "LocalizedNumberRow";
 
+            /** Indicates that this subtype never shows the optional global number row. */
+            public static final String NO_NUMBER_ROW = "NoNumberRow";
+
             private ExtraValue() {
                 // This utility class is not publicly instantiable.
             }

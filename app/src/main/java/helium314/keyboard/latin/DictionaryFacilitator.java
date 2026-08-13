@@ -138,6 +138,13 @@ public interface DictionaryFacilitator {
             final SettingsValuesForSuggestion settingsValuesForSuggestion, final int sessionId,
             final int inputStyle);
 
+    /** Returns suggestions generated only by the preferred locale user-history dictionary. */
+    @NonNull List<SuggestedWords.SuggestedWordInfo> getUserHistorySuggestions(
+            final ComposedData composedData, final NgramContext ngramContext,
+            @NonNull final Keyboard keyboard,
+            final SettingsValuesForSuggestion settingsValuesForSuggestion, final int sessionId,
+            final int inputStyle);
+
     boolean isValidSpellingWord(final String word);
 
     boolean isValidSuggestionWord(final String word);

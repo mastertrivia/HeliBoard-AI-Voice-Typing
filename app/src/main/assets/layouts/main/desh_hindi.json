@@ -1,0 +1,600 @@
+[
+  [
+    {
+      "$": "desh_hindi_vowel_selector",
+      "default": {
+        "label": "अ"
+      },
+      "active": {
+        "label": "ः"
+      }
+    },
+    {
+      "$": "desh_hindi_vowel_selector",
+      "default": {
+        "label": "आ"
+      },
+      "active": {
+        "label": "ा"
+      }
+    },
+    {
+      "$": "desh_hindi_vowel_selector",
+      "default": {
+        "label": "इ"
+      },
+      "active": {
+        "label": "ि"
+      }
+    },
+    {
+      "$": "desh_hindi_vowel_selector",
+      "default": {
+        "label": "ई"
+      },
+      "active": {
+        "label": "ी"
+      }
+    },
+    {
+      "$": "desh_hindi_vowel_selector",
+      "default": {
+        "label": "उ"
+      },
+      "active": {
+        "label": "ु"
+      }
+    },
+    {
+      "$": "desh_hindi_vowel_selector",
+      "default": {
+        "label": "ऊ"
+      },
+      "active": {
+        "label": "ू"
+      }
+    },
+    {
+      "$": "desh_hindi_vowel_selector",
+      "default": {
+        "label": "ए"
+      },
+      "active": {
+        "label": "े"
+      }
+    },
+    {
+      "$": "desh_hindi_vowel_selector",
+      "default": {
+        "label": "ऐ"
+      },
+      "active": {
+        "label": "ै"
+      }
+    },
+    {
+      "$": "desh_hindi_vowel_selector",
+      "default": {
+        "label": "ओ"
+      },
+      "active": {
+        "label": "ो"
+      }
+    },
+    {
+      "$": "desh_hindi_vowel_selector",
+      "default": {
+        "label": "औ"
+      },
+      "active": {
+        "label": "ौ"
+      }
+    },
+    {
+      "$": "desh_hindi_vowel_selector",
+      "default": {
+        "label": "ं"
+      },
+      "active": {
+        "label": "ँ"
+      }
+    }
+  ],
+  [
+    {
+      "label": "क",
+      "popup": {
+        "main": {
+          "label": "क्र"
+        },
+        "relevant": [
+          {
+            "label": "क्"
+          },
+          {
+            "label": "क़"
+          },
+          {
+            "label": "क्त"
+          },
+          {
+            "label": "क्ष",
+            "labelFlags": 128
+          }
+        ]
+      }
+    },
+    {
+      "label": "ख",
+      "popup": {
+        "main": {
+          "label": "ख्र"
+        },
+        "relevant": [
+          {
+            "label": "ख्"
+          },
+          {
+            "label": "ख़"
+          }
+        ]
+      }
+    },
+    {
+      "label": "ग",
+      "popup": {
+        "main": {
+          "label": "ग्र"
+        },
+        "relevant": [
+          {
+            "label": "ग्"
+          },
+          {
+            "label": "ग़"
+          },
+          {
+            "label": "ग्य"
+          }
+        ]
+      }
+    },
+    {
+      "label": "घ",
+      "popup": {
+        "main": {
+          "label": "घ्र"
+        },
+        "relevant": [
+          {
+            "label": "घ्"
+          }
+        ]
+      }
+    },
+    {
+      "label": "च",
+      "popup": {
+        "main": {
+          "label": "च्र"
+        },
+        "relevant": [
+          {
+            "label": "च्"
+          },
+          {
+            "label": "च्य"
+          }
+        ]
+      }
+    },
+    {
+      "label": "छ",
+      "popup": {
+        "main": {
+          "label": "छ्र"
+        },
+        "relevant": [
+          {
+            "label": "छ्"
+          }
+        ]
+      }
+    },
+    {
+      "label": "ज",
+      "popup": {
+        "main": {
+          "label": "ज्र"
+        },
+        "relevant": [
+          {
+            "label": "ज्"
+          },
+          {
+            "label": "ज़"
+          },
+          {
+            "label": "ज्ञ",
+            "labelFlags": 128
+          }
+        ]
+      }
+    },
+    {
+      "label": "झ",
+      "popup": {
+        "main": {
+          "label": "झ्र"
+        },
+        "relevant": [
+          {
+            "label": "झ्"
+          }
+        ]
+      }
+    },
+    {
+      "label": "ञ"
+    },
+    {
+      "label": "ं"
+    },
+    {
+      "label": "ँ"
+    }
+  ],
+  [
+    {
+      "label": "ट"
+    },
+    {
+      "label": "ठ"
+    },
+    {
+      "label": "ड",
+      "popup": {
+        "main": {
+          "label": "ड़"
+        }
+      }
+    },
+    {
+      "label": "ढ",
+      "popup": {
+        "main": {
+          "label": "ढ़"
+        }
+      }
+    },
+    {
+      "label": "ण"
+    },
+    {
+      "label": "त",
+      "popup": {
+        "main": {
+          "label": "त्र",
+          "labelFlags": 128
+        },
+        "relevant": [
+          {
+            "label": "त्"
+          },
+          {
+            "label": "त्य"
+          },
+          {
+            "label": "त्व"
+          }
+        ]
+      }
+    },
+    {
+      "label": "थ"
+    },
+    {
+      "label": "द",
+      "popup": {
+        "main": {
+          "label": "द्र"
+        },
+        "relevant": [
+          {
+            "label": "द्"
+          }
+        ]
+      }
+    },
+    {
+      "label": "ध",
+      "popup": {
+        "main": {
+          "label": "ध्र"
+        },
+        "relevant": [
+          {
+            "label": "ध्"
+          }
+        ]
+      }
+    },
+    {
+      "label": "न",
+      "popup": {
+        "main": {
+          "label": "न्य"
+        },
+        "relevant": [
+          {
+            "label": "न्"
+          },
+          {
+            "label": "ङ"
+          },
+          {
+            "label": "ञ"
+          }
+        ]
+      }
+    },
+    {
+      "label": "-"
+    }
+  ],
+  [
+    {
+      "label": "प",
+      "popup": {
+        "main": {
+          "label": "प्र",
+          "labelFlags": 128
+        },
+        "relevant": [
+          {
+            "label": "प्"
+          },
+          {
+            "label": "प्य"
+          },
+          {
+            "label": "प्त"
+          },
+          {
+            "label": "प्ल"
+          }
+        ]
+      }
+    },
+    {
+      "label": "फ",
+      "popup": {
+        "main": {
+          "label": "फ़"
+        },
+        "relevant": [
+          {
+            "label": "फ्"
+          },
+          {
+            "label": "फ्र"
+          }
+        ]
+      }
+    },
+    {
+      "label": "ब",
+      "popup": {
+        "main": {
+          "label": "ब्र"
+        },
+        "relevant": [
+          {
+            "label": "ब्"
+          },
+          {
+            "label": "ब्ल"
+          }
+        ]
+      }
+    },
+    {
+      "label": "भ",
+      "popup": {
+        "main": {
+          "label": "भ्र"
+        },
+        "relevant": [
+          {
+            "label": "भ्"
+          }
+        ]
+      }
+    },
+    {
+      "label": "म",
+      "popup": {
+        "main": {
+          "label": "म्र"
+        },
+        "relevant": [
+          {
+            "label": "म्"
+          },
+          {
+            "label": "म्य"
+          }
+        ]
+      }
+    },
+    {
+      "label": "य",
+      "popup": {
+        "main": {
+          "label": "य्"
+        },
+        "relevant": [
+          {
+            "label": "य्र"
+          }
+        ]
+      }
+    },
+    {
+      "label": "र",
+      "popup": {
+        "main": {
+          "label": "र्"
+        },
+        "relevant": [
+          {
+            "label": "र्क"
+          },
+          {
+            "label": "र्ग"
+          },
+          {
+            "label": "र्त"
+          },
+          {
+            "label": "र्म"
+          },
+          {
+            "label": "र्य"
+          }
+        ]
+      }
+    },
+    {
+      "label": "ल",
+      "popup": {
+        "main": {
+          "label": "ल्य"
+        },
+        "relevant": [
+          {
+            "label": "ल्"
+          },
+          {
+            "label": "ल्ल"
+          }
+        ]
+      }
+    },
+    {
+      "label": "व",
+      "popup": {
+        "main": {
+          "label": "व्र"
+        },
+        "relevant": [
+          {
+            "label": "व्"
+          },
+          {
+            "label": "व्य"
+          }
+        ]
+      }
+    },
+    {
+      "label": "श",
+      "popup": {
+        "main": {
+          "label": "श्र",
+          "labelFlags": 128
+        },
+        "relevant": [
+          {
+            "label": "श्"
+          },
+          {
+            "label": "श्च"
+          },
+          {
+            "label": "श्व"
+          }
+        ]
+      }
+    },
+    {
+      "label": "क्ष",
+      "labelFlags": 128,
+      "popup": {
+        "relevant": [
+          {
+            "label": "क्षं"
+          },
+          {
+            "label": "क्ष्"
+          }
+        ]
+      }
+    }
+  ],
+  [
+    {
+      "label": "ष"
+    },
+    {
+      "label": "स",
+      "popup": {
+        "main": {
+          "label": "स्"
+        },
+        "relevant": [
+          {
+            "label": "स्र"
+          },
+          {
+            "label": "स्व"
+          }
+        ]
+      }
+    },
+    {
+      "label": "ह",
+      "popup": {
+        "main": {
+          "label": "ह्र"
+        },
+        "relevant": [
+          {
+            "label": "ह्"
+          },
+          {
+            "label": "ह्म"
+          }
+        ]
+      }
+    },
+    {
+      "label": "त्र",
+      "labelFlags": 128
+    },
+    {
+      "label": "ज्ञ",
+      "labelFlags": 128
+    },
+    {
+      "label": "श्र",
+      "labelFlags": 128
+    },
+    {
+      "label": "ऋ"
+    },
+    {
+      "label": "ॐ"
+    },
+    {
+      "label": "ः"
+    },
+    {
+      "label": "्",
+      "labelFlags": 128
+    },
+    {
+      "label": "़"
+    }
+  ]
+]

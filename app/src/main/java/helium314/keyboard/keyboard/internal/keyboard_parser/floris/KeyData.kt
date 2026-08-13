@@ -131,6 +131,29 @@ class ShiftStateSelector(
     }
 }
 
+
+/**
+ * Selects between the independent-vowel and vowel-diacritic form used by the
+ * built-in "देश हिंदी keyboard" subtype.
+ *
+ * The state is part of KeyboardId so the keyboard cache keeps the two rendered
+ * states separate. This is intentionally a keyboard-level state selector:
+ * the text/composition engine decides when the state changes, while the layout
+ * only describes which glyphs should be displayed in each state.
+ */
+@Serializable
+@SerialName("desh_hindi_vowel_selector")
+class DeshHindiVowelSelector(
+    val active: AbstractKeyData,
+    val default: AbstractKeyData,
+) : AbstractKeyData {
+    override fun compute(params: KeyboardParams, isPopup: Boolean): KeyData? {
+        return (if (params.mId.deshHindiVowelDiacriticMode) active else default).compute(params)
+    }
+
+    override fun asString(isForDisplay: Boolean): String = ""
+}
+
 /**
  * Allows to select an [AbstractKeyData] based on the current variation. The JSON class identifier for this selector is `variation_selector`.
  *

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND GPL-3.0-only
 package helium314.keyboard.latin
 
+import helium314.keyboard.latin.personalization.DeshEnglishLearningManager
 import android.app.Application
 import android.os.Build
 import helium314.keyboard.keyboard.emoji.SupportedEmojis
@@ -25,6 +26,10 @@ class App : Application() {
         FoldableUtils.init(this)
         Settings.init(this)
         AiVoiceDependencies.initialize(this)
+        DeshHindiPredictor.initialize(this)
+        DeshEnglishDictionaryLoader.initialize(this)
+        DeshEnglishLearningManager.initialize(this)
+        DeshStyleLearningStore.initialize(this)
         SubtypeSettings.init(this)
 
         val scope = CoroutineScope(Dispatchers.Default)

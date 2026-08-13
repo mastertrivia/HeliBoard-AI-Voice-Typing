@@ -881,13 +881,11 @@ public final class InputLogic {
                 mLatinIME.showInputPickerDialog();
                 break;
             case KeyCode.VOICE_INPUT:
-                // switching to shortcut IME, shift state, keyboard,... is handled by LatinIME,
-                // {@link KeyboardSwitcher#onEvent(Event)}, or {@link #onPressKey(int,int,boolean)} and {@link #onReleaseKey(int,boolean)}.
-                // We need to switch to the shortcut IME. This is handled by LatinIME since the
-                // input logic has no business with IME switching.
+                // Normal Voice Input is handled entirely by LatinIME's internal continuous
+                // speech controller. It must not switch to a separate shortcut IME.
             case KeyCode.EMOJI, KeyCode.TOGGLE_ONE_HANDED_MODE, KeyCode.SWITCH_ONE_HANDED_MODE, KeyCode.TOGGLE_FLOATING_WINDOW,
                  KeyCode.KEY_REPEAT, // can be configured on main layout using !code/-11000, and we shouldn't crash on this in debug mode
-                 KeyCode.AI_VOICE_INPUT: // AI voice typing: no-op for now, the toolbar button behavior is implemented in a later milestone
+                 KeyCode.AI_VOICE_INPUT:
                 break;
             default:
                 if (KeyCode.INSTANCE.isModifier(keyCode))

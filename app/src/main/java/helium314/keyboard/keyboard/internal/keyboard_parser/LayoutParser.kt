@@ -6,6 +6,7 @@ import helium314.keyboard.keyboard.internal.KeyboardParams
 import helium314.keyboard.keyboard.internal.keyboard_parser.floris.AbstractKeyData
 import helium314.keyboard.keyboard.internal.keyboard_parser.floris.AutoTextKeyData
 import helium314.keyboard.keyboard.internal.keyboard_parser.floris.CaseSelector
+import helium314.keyboard.keyboard.internal.keyboard_parser.floris.DeshHindiVowelSelector
 import helium314.keyboard.keyboard.internal.keyboard_parser.floris.CharWidthSelector
 import helium314.keyboard.keyboard.internal.keyboard_parser.floris.KanaSelector
 import helium314.keyboard.keyboard.internal.keyboard_parser.floris.KeyData
@@ -131,6 +132,7 @@ object LayoutParser {
                 subclass(AutoTextKeyData::class, AutoTextKeyData.serializer())
                 subclass(MultiTextKeyData::class, MultiTextKeyData.serializer())
                 subclass(CaseSelector::class, CaseSelector.serializer())
+                subclass(DeshHindiVowelSelector::class, DeshHindiVowelSelector.serializer())
                 subclass(ShiftStateSelector::class, ShiftStateSelector.serializer())
                 subclass(VariationSelector::class, VariationSelector.serializer())
                 subclass(KeyboardStateSelector::class, KeyboardStateSelector.serializer())
@@ -163,6 +165,7 @@ object LayoutParser {
                 subclass(AutoTextKeyData::class, AutoTextKeyData.serializer())
                 subclass(MultiTextKeyData::class, MultiTextKeyData.serializer())
                 subclass(CaseSelector::class, CaseSelector.serializer())
+                subclass(DeshHindiVowelSelector::class, DeshHindiVowelSelector.serializer())
                 subclass(ShiftStateSelector::class, ShiftStateSelector.serializer())
                 subclass(VariationSelector::class, VariationSelector.serializer())
                 subclass(KeyboardStateSelector::class, KeyboardStateSelector.serializer())

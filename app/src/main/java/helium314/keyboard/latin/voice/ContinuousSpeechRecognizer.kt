@@ -1,0 +1,458 @@
+/*
+ * Copyright (C) 2026 HeliBoard voice integration work.
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Speechnotes-style continuous speech controller for HeliBoard's normal
+ * Voice input key. This reproduces the observable controller architecture
+ * from the supplied Speechnotes APK while using Android's public
+ * SpeechRecognizer API inside the IME.
+ */
+package helium314.keyboard.latin.voice
+
+import android.content.Context
+import android.content.Intent
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import java.util.ArrayDeque
+import java.util.Locale
+
+/**
+ * Continuous recognition controller.
+ *
+ * The controller intentionally keeps partial results internal. A segment is
+ * committed only from a final result. When Android ends a recognition session
+ * naturally, the controller starts the next session, while an explicit stop
+ * permanently prevents restart until start() is called again.
+ *
+ * The supplied Speechnotes APK exposes the same observable pieces: a
+ * ContSpeechRecognizer-style session controller, partial-result windows,
+ * partial-diff tracking, no-speech timing, and continuous restart/error
+ * handling. The implementation below mirrors those responsibilities without
+ * copying proprietary application code.
+ */
+class ContinuousSpeechRecognizer(
+    context: Context,
+    private val callback: Callback,
+) {
+    interface Callback {
+        fun onVoicePartialResult(text: String)
+        fun onVoiceFinalResult(text: String)
+        /** Called only when the user explicitly stops dictation. */
+        fun onVoiceStoppedWithBuffer(text: String)
+        fun onVoiceStateChanged(listening: Boolean)
+        fun onVoiceError(errorCode: Int)
+    }
+
+    private val appContext = context.applicationContext
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var recognizer: SpeechRecognizer? = null
+    // Every recognizer instance owns one generation. Android may deliver callbacks
+    // asynchronously after cancel()/destroy(); stale callbacks must never mutate
+    // the newer continuous-dictation session.
+    private var recognizerGeneration = 0L
+    private var listening = false
+    private var explicitlyStopped = true
+    private var restartGeneration = 0L
+    private var locale: Locale = Locale.getDefault()
+
+    // Speechnotes exposes a partialWindows structure and a diffPartial helper.
+    // Keep a tiny rolling window here so each provider update can be compared
+    // to its recent predecessors without ever committing partial text.
+    private val partialWindows = ArrayDeque<String>(PARTIAL_WINDOW_SIZE)
+    private var latestPartial = ""
+    private var lastStablePartial = ""
+    // Only the currently active recognition segment is kept as a live preview.
+    // Speechnotes commits a completed recognition segment when the recognizer
+    // detects the user's pause, then immediately continues listening. It does
+    // NOT wait for the microphone's final Stop action to commit every segment.
+    private var speechStartedAt = 0L
+    private var lastPartialAt = 0L
+    private var beganSpeech = false
+    private var restartPosted = false
+
+    // Do not impose an arbitrary short silence timeout here. Android's
+    // SpeechRecognizer already reports speech/no-match/timeout conditions,
+    // and Speechnotes keeps continuous dictation alive across those session
+    // boundaries. A local 3.5-second watchdog would incorrectly make the IME
+    // appear to stop during a normal pause.
+
+    private fun isCurrentGeneration(generation: Long): Boolean =
+        !explicitlyStopped && generation == recognizerGeneration
+
+    private fun newRecognitionListener(generation: Long) = object : RecognitionListener {
+        override fun onReadyForSpeech(params: Bundle?) {
+            if (!isCurrentGeneration(generation)) return
+            listening = true
+            beganSpeech = false
+            speechStartedAt = SystemClock.elapsedRealtime()
+            callback.onVoiceStateChanged(true)
+        }
+
+        override fun onBeginningOfSpeech() {
+            if (!isCurrentGeneration(generation)) return
+            beganSpeech = true
+        }
+
+        override fun onRmsChanged(rmsdB: Float) = Unit
+
+        override fun onBufferReceived(buffer: ByteArray?) = Unit
+
+        override fun onEndOfSpeech() {
+            if (!isCurrentGeneration(generation)) return
+            // Keep the session state alive until onResults()/onError().
+            // Speechnotes treats this as a segment boundary rather than as a
+            // user stop, so the controller is allowed to restart afterward.
+            lastPartialAt = SystemClock.elapsedRealtime()
+        }
+
+        override fun onError(error: Int) {
+            if (!isCurrentGeneration(generation)) return
+            listening = false
+            callback.onVoiceError(error)
+            if (explicitlyStopped) {
+                callback.onVoiceStateChanged(false)
+                return
+            }
+            val delay = restartDelay(error)
+            if (error == SpeechRecognizer.ERROR_NO_MATCH ||
+                    error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                // This recognition session produced no final transcription.
+                // Do not leave the previous partial hypothesis displayed while
+                // the next continuous session is starting: that would make a
+                // stale phrase look like current speech. A no-match boundary is
+                // a clean new segment, so clear only the transient preview.
+                clearPartialWindow()
+                callback.onVoicePartialResult("")
+            }
+            if (delay == NO_RESTART) {
+                // Permanent/non-recoverable errors (for example missing
+                // microphone permission) must not leave HeliBoard visually
+                // stuck in an active Voice state.
+                explicitlyStopped = true
+                restartGeneration++
+                restartPosted = false
+                mainHandler.removeCallbacksAndMessages(RESTART_TOKEN)
+                callback.onVoiceStateChanged(false)
+                return
+            }
+            // Keep Voice logically active while transient provider/session
+            // errors are being recovered. The next session is scheduled below.
+            callback.onVoiceStateChanged(true)
+            scheduleRestart(delay)
+        }
+
+        override fun onResults(results: Bundle?) {
+            if (!isCurrentGeneration(generation)) return
+            val text = results
+                ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                ?.asSequence()
+                ?.map { it.trim() }
+                ?.firstOrNull { it.isNotEmpty() }
+                .orEmpty()
+
+            clearPartialWindow()
+            listening = false
+            if (text.isNotEmpty() && !explicitlyStopped) {
+                // IMPORTANT: this is the Speechnotes behavior. A natural pause
+                // produces a final recognition result, and that completed
+                // segment is committed immediately while Voice remains ON.
+                // The next recognition session starts automatically.
+                callback.onVoiceFinalResult(text)
+            } else if (text.isNotEmpty() && explicitlyStopped) {
+                // stop() / destroy() already committed the visible unfinished
+                // partial buffer before cancelling SpeechRecognizer. A late
+                // onResults() callback belongs to that cancelled session and
+                // must NOT be committed a second time.
+                //
+                // This is especially important because Android may deliver a
+                // final result asynchronously after cancel().
+            }
+
+            if (explicitlyStopped) {
+                callback.onVoiceStateChanged(false)
+            } else {
+                // Keep the microphone/Voice UI active across a natural pause.
+                callback.onVoiceStateChanged(true)
+                scheduleRestart(RESTART_AFTER_RESULTS_MS)
+            }
+        }
+
+        override fun onPartialResults(partialResults: Bundle?) {
+            if (!isCurrentGeneration(generation)) return
+            val text = partialResults
+                ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                ?.asSequence()
+                ?.map { it.trim() }
+                ?.firstOrNull { it.isNotEmpty() }
+                .orEmpty()
+            if (text.isEmpty()) return
+
+            latestPartial = text
+            lastPartialAt = SystemClock.elapsedRealtime()
+            partialWindows.addLast(text)
+            while (partialWindows.size > PARTIAL_WINDOW_SIZE) partialWindows.removeFirst()
+
+            // Use the rolling-window diff result instead of merely calculating
+            // it and throwing it away.  The stable prefix is a guard against a
+            // recognizer provider briefly regressing its partial hypothesis.
+            // It never gets committed by itself; the final onResults() remains
+            // the natural-pause commit boundary.
+            val stable = diffPartial(partialWindows.toList())
+            if (stable.isNotEmpty()) {
+                lastStablePartial = stable
+            }
+
+            // Prefer the newest hypothesis when it is consistent with the
+            // stable prefix. If a provider regresses, keep the last stable
+            // prefix visible instead of jumping backwards.
+            val displayText = when {
+                lastStablePartial.isEmpty() -> latestPartial
+                latestPartial.startsWith(lastStablePartial, ignoreCase = false) -> latestPartial
+                else -> lastStablePartial
+            }
+            callback.onVoicePartialResult(displayText)
+        }
+
+        override fun onEvent(eventType: Int, params: Bundle?) = Unit
+    }
+
+    fun start(locale: Locale) {
+        mainHandler.post {
+            this.locale = locale
+            explicitlyStopped = false
+            restartGeneration++
+            clearPartialWindow()
+            ensureRecognizer()
+            beginRecognition()
+        }
+    }
+
+    /**
+     * Changes the recognition locale while continuous Voice is active.
+     *
+     * A language switch is a new recognition session: preserve/commit the
+     * currently visible partial segment, cancel the old session, update the
+     * locale, and immediately start a fresh session. The Voice state remains
+     * ON throughout the transition.
+     */
+    fun updateLocale(newLocale: Locale) {
+        mainHandler.post {
+            if (locale == newLocale) return@post
+            val wasActive = !explicitlyStopped
+            if (!wasActive) {
+                locale = newLocale
+                return@post
+            }
+
+            // Do not silently lose speech that was visible in the old
+            // language. Treat it as the final part of the old session, then
+            // start the new locale without turning Voice off.
+            val bufferedText = latestPartial.trim()
+            if (bufferedText.isNotEmpty()) {
+                callback.onVoiceStoppedWithBuffer(bufferedText)
+            }
+
+            locale = newLocale
+            restartGeneration++
+            restartPosted = false
+            mainHandler.removeCallbacksAndMessages(RESTART_TOKEN)
+            recognizerGeneration++
+            recognizer?.cancel()
+            recognizer?.destroy()
+            recognizer = null
+            clearPartialWindow()
+            listening = false
+            callback.onVoiceStateChanged(true)
+
+            ensureRecognizer()
+            mainHandler.post {
+                if (!explicitlyStopped && locale == newLocale) {
+                    beginRecognition()
+                }
+            }
+        }
+    }
+
+    fun stop() {
+        mainHandler.post {
+            // A natural pause has already committed its completed segment.
+            // At explicit Stop we commit only the currently unfinished partial
+            // segment, then return immediately to the normal HeliBoard UI.
+            explicitlyStopped = true
+            restartGeneration++
+            restartPosted = false
+            listening = false
+            mainHandler.removeCallbacksAndMessages(RESTART_TOKEN)
+            recognizerGeneration++
+            recognizer?.cancel()
+            recognizer?.destroy()
+            recognizer = null
+
+            // If the provider has only delivered partial text for the current
+            // recognition segment, preserve that visible buffer as well.
+            // Only the current unfinished partial segment can remain here.
+            // Earlier segments were already committed on natural pauses.
+            val bufferedText = latestPartial.trim()
+            if (bufferedText.isNotEmpty()) {
+                callback.onVoiceStoppedWithBuffer(bufferedText)
+            }
+            clearPartialWindow()
+            callback.onVoiceStateChanged(false)
+        }
+    }
+
+    /**
+     * Returns whether continuous Voice mode is active, including the short
+     * teardown/restart window between recognition sessions.  This must not be
+     * tied to SpeechRecognizer's low-level LISTENING state: during a natural
+     * pause/onResults/onError the recognizer is temporarily not listening, but
+     * HeliBoard Voice is still ON and a restart may already be scheduled.
+     * Keeping this true prevents a keyboard tap during that window from being
+     * ignored and accidentally allowing the scheduled recognizer restart.
+     */
+    fun isListening(): Boolean = !explicitlyStopped
+
+    fun destroy() {
+        mainHandler.post {
+            // Finalize the currently visible partial segment before the recognizer
+            // and its buffers are destroyed. This protects text when the IME is
+            // collapsed/destroyed without an explicit Voice-stop key event.
+            val bufferedText = latestPartial.trim()
+            if (bufferedText.isNotEmpty()) {
+                callback.onVoiceStoppedWithBuffer(bufferedText)
+            }
+            explicitlyStopped = true
+            restartGeneration++
+            restartPosted = false
+            mainHandler.removeCallbacksAndMessages(RESTART_TOKEN)
+            recognizerGeneration++
+            recognizer?.cancel()
+            recognizer?.destroy()
+            recognizer = null
+            listening = false
+            clearPartialWindow()
+            callback.onVoiceStateChanged(false)
+        }
+    }
+
+    private fun ensureRecognizer() {
+        if (recognizer != null) return
+        if (!SpeechRecognizer.isRecognitionAvailable(appContext)) {
+            listening = false
+            callback.onVoiceError(SpeechRecognizer.ERROR_CLIENT)
+            explicitlyStopped = true
+            restartGeneration++
+            restartPosted = false
+            mainHandler.removeCallbacksAndMessages(RESTART_TOKEN)
+            callback.onVoiceStateChanged(false)
+            return
+        }
+        val generation = ++recognizerGeneration
+        recognizer = SpeechRecognizer.createSpeechRecognizer(appContext).also {
+            it.setRecognitionListener(newRecognitionListener(generation))
+        }
+    }
+
+    private fun beginRecognition() {
+        if (explicitlyStopped || recognizer == null) return
+        val current = recognizer ?: return
+        clearPartialWindow()
+        beganSpeech = false
+        speechStartedAt = SystemClock.elapsedRealtime()
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale.toLanguageTag())
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, locale.toLanguageTag())
+            putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+            // Speechnotes requests Android's dictation mode when available.
+            // Use the public extra key string so this remains compatible across SDK levels.
+            putExtra("android.speech.extra.DICTATION_MODE", true)
+            // Allow providers that expose unstable recognition text to surface it as partials.
+            putExtra("android.speech.extra.UNSTABLE_TEXT", true)
+            // Do not force the provider offline. This follows the supplied
+            // Speechnotes behavior: Android/default recognition service decides
+            // whether local or network recognition is used.
+        }
+        try {
+            restartPosted = false
+            current.startListening(intent)
+        } catch (_: RuntimeException) {
+            listening = false
+            if (!explicitlyStopped) {
+                callback.onVoiceStateChanged(true)
+                scheduleRestart(RESTART_AFTER_EXCEPTION_MS)
+            }
+        }
+    }
+
+    private fun scheduleRestart(delayMs: Long) {
+        if (explicitlyStopped || restartPosted || delayMs < 0L) return
+        val generation = restartGeneration
+        restartPosted = true
+        mainHandler.removeCallbacksAndMessages(RESTART_TOKEN)
+        mainHandler.postAtTime({
+            restartPosted = false
+            if (!explicitlyStopped && generation == restartGeneration) {
+                ensureRecognizer()
+                beginRecognition()
+            }
+        }, RESTART_TOKEN, SystemClock.uptimeMillis() + delayMs)
+    }
+
+    private fun clearPartialWindow() {
+        partialWindows.clear()
+        latestPartial = ""
+        lastStablePartial = ""
+        lastPartialAt = 0L
+        beganSpeech = false
+    }
+
+    /** Returns the longest prefix shared by the recent partial-result window. */
+    private fun diffPartial(window: List<String>): String {
+        if (window.isEmpty()) return ""
+        var end = window.first().length
+        for (candidate in window.drop(1)) {
+            end = minOf(end, candidate.length)
+            var i = 0
+            while (i < end && window.first()[i] == candidate[i]) i++
+            end = i
+            if (end == 0) return ""
+        }
+        return window.first().substring(0, end).trim()
+    }
+
+    private fun restartDelay(error: Int): Long = when (error) {
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> RESTART_BUSY_MS
+        SpeechRecognizer.ERROR_NETWORK,
+        SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
+        SpeechRecognizer.ERROR_SERVER,
+        SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> RESTART_PROVIDER_ERROR_MS
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
+        SpeechRecognizer.ERROR_NO_MATCH -> RESTART_NO_MATCH_MS
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> NO_RESTART
+        else -> RESTART_GENERIC_ERROR_MS
+    }
+
+    companion object {
+        private val RESTART_TOKEN = Any()
+        private const val PARTIAL_WINDOW_SIZE = 4
+        // Small scheduling delays are only used to let the Android recognizer
+        // finish tearing down the previous session before startListening() is
+        // called again. They are not user-facing silence timers.
+        private const val RESTART_AFTER_RESULTS_MS = 100L
+        private const val RESTART_AFTER_EXCEPTION_MS = 500L
+        private const val RESTART_NO_SPEECH_MS = 100L
+        private const val RESTART_NO_MATCH_MS = 100L
+        private const val RESTART_BUSY_MS = 1000L
+        private const val RESTART_PROVIDER_ERROR_MS = 700L
+        private const val RESTART_GENERIC_ERROR_MS = 350L
+        private const val NO_RESTART = -1L
+    }
+}
