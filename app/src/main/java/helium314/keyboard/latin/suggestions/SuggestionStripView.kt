@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener
 import android.graphics.Color
+import android.graphics.drawable.AnimatedVectorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.os.SystemClock
@@ -28,6 +29,7 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.core.view.doOnNextLayout
 import androidx.core.view.forEach
 import androidx.core.view.isVisible
@@ -61,7 +63,6 @@ import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.latin.utils.removeFirst
 import helium314.keyboard.latin.utils.removePinnedKey
 import helium314.keyboard.latin.utils.setToolbarButtonsActivatedStateOnPrefChange
-import helium314.keyboard.latin.voice.VoiceTranscriptionBufferView
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 import kotlin.math.min
@@ -224,9 +225,6 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private var suggestedWords = SuggestedWords.getEmptyInstance()
     private var startIndexOfMoreSuggestions = 0
     private var isExternalSuggestionVisible = false // Required to disable the more suggestions if other suggestions are visible
-    private var voiceTranscriptionBufferView: VoiceTranscriptionBufferView? = null
-    // Preserve the user's normal toolbar state while Voice temporarily owns the strip.
-    private var voicePreviousToolbarVisible: Boolean? = null
     private val layoutHelper = SuggestionStripLayoutHelper(context, attrs, defStyle, wordViews, dividerViews, debugInfoViews)
     private val moreSuggestionsView = moreSuggestionsContainer.findViewById<MoreSuggestionsView>(R.id.more_suggestions_view).apply {
         val slidingListener = object : SimpleOnGestureListener() {
@@ -286,10 +284,6 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun setSuggestions(suggestions: SuggestedWords, isRtlLanguage: Boolean) {
-        if (voiceTranscriptionBufferView != null) {
-            suggestedWords = suggestions
-            return
-        }
         clear()
         setRtl(isRtlLanguage)
         suggestedWords = suggestions
@@ -300,73 +294,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         updateKeys()
     }
 
-    /**
-     * Replaces the normal suggestion contents with the live continuous-voice buffer.
-     * The existing strip container is deliberately reused so HeliBoard's keyboard
-     * measurement/insets code sees the expanded height as part of the IME.
-     */
-    fun showVoiceTranscriptionBuffer() {
-        if (voiceTranscriptionBufferView == null) {
-            voicePreviousToolbarVisible = toolbarContainer.isVisible
-
-            clear()
-            isExternalSuggestionVisible = true
-            voiceTranscriptionBufferView = VoiceTranscriptionBufferView(context).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    resources.getDimensionPixelSize(R.dimen.config_suggestions_strip_height),
-                )
-            }
-            suggestionsStrip.addView(voiceTranscriptionBufferView)
-        }
-        setToolbarVisibility(false)
-        voiceTranscriptionBufferView?.setTranscription("Listening…")
-        updateVoiceStripHeight(voiceTranscriptionBufferView?.height ?: baseVoiceStripHeight())
-    }
-
-    fun setVoiceTranscriptionText(text: String) {
-        val buffer = voiceTranscriptionBufferView ?: return
-        buffer.setTranscription(text.ifBlank { "Listening…" })
-        buffer.post { updateVoiceStripHeight(buffer.height.coerceAtLeast(baseVoiceStripHeight())) }
-    }
-
-    fun isVoiceTranscriptionBufferActive(): Boolean = voiceTranscriptionBufferView != null
-
-    fun hideVoiceTranscriptionBuffer() {
-        if (voiceTranscriptionBufferView == null) return
-        voiceTranscriptionBufferView?.let { suggestionsStrip.removeView(it) }
-        voiceTranscriptionBufferView = null
-        updateVoiceStripHeight(baseVoiceStripHeight())
-        isExternalSuggestionVisible = false
-        listener.removeExternalSuggestions()
-        // Restore exactly the toolbar visibility that existed before Voice took over.
-        voicePreviousToolbarVisible?.let { setToolbarVisibility(it) }
-        voicePreviousToolbarVisible = null
-    }
-
-    private fun baseVoiceStripHeight(): Int =
-        resources.getDimensionPixelSize(R.dimen.config_suggestions_strip_height)
-
-    private fun updateVoiceStripHeight(height: Int) {
-        val base = baseVoiceStripHeight()
-        val target = height.coerceAtLeast(base)
-        val parent = (parent as? ViewGroup) ?: return
-        val params = parent.layoutParams ?: return
-        if (params.height != target) {
-            params.height = target
-            parent.layoutParams = params
-        }
-        val own = layoutParams
-        if (own != null && own.height != target) {
-            own.height = target
-            layoutParams = own
-        }
-        parent.requestLayout()
-        requestLayout()
-    }
-
     fun setExternalSuggestionView(view: View?, addCloseButton: Boolean) {
-        if (voiceTranscriptionBufferView != null) return
         clear()
         isExternalSuggestionVisible = true
 
@@ -659,6 +587,27 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     fun updateVoiceKey() {
         toolbar.findViewWithTag<View>(ToolbarKey.VOICE)?.isVisible = true
         pinnedKeys.findViewWithTag<View>(ToolbarKey.VOICE)?.isVisible = true
+    }
+
+    private var voiceListeningDrawable: AnimatedVectorDrawable? = null
+
+    fun setVoiceListening(listening: Boolean) {
+        val button = toolbar.findViewWithTag<ImageButton>(ToolbarKey.VOICE)
+            ?: pinnedKeys.findViewWithTag<ImageButton>(ToolbarKey.VOICE)
+            ?: return
+        if (listening) {
+            val drawable = ContextCompat.getDrawable(context, R.drawable.ic_sound_bars_anim)
+            if (drawable is AnimatedVectorDrawable) {
+                voiceListeningDrawable?.stop()
+                voiceListeningDrawable = drawable
+                button.setImageDrawable(drawable)
+                drawable.start()
+            }
+        } else {
+            voiceListeningDrawable?.stop()
+            voiceListeningDrawable = null
+            button.setImageDrawable(KeyboardIconsSet.instance.getNewDrawable(ToolbarKey.VOICE.name, context))
+        }
     }
 
     private fun updateKeys() {

@@ -6,97 +6,214 @@
         "label": "अ"
       },
       "active": {
-        "label": "ः"
+        "code": -10058,
+        "label": "अ"
       }
     },
     {
       "$": "desh_hindi_vowel_selector",
       "default": {
-        "label": "आ"
+        "label": "आ",
+        "popup": {
+          "main": {
+            "label": "ा"
+          }
+        }
       },
       "active": {
-        "label": "ा"
+        "label": "ा",
+        "popup": {
+          "main": {
+            "label": "आ"
+          }
+        }
       }
     },
     {
       "$": "desh_hindi_vowel_selector",
       "default": {
-        "label": "इ"
+        "label": "इ",
+        "popup": {
+          "main": {
+            "label": "ि"
+          }
+        }
       },
       "active": {
-        "label": "ि"
+        "label": "ि",
+        "popup": {
+          "main": {
+            "label": "इ"
+          }
+        }
       }
     },
     {
       "$": "desh_hindi_vowel_selector",
       "default": {
-        "label": "ई"
+        "label": "ई",
+        "popup": {
+          "main": {
+            "label": "ी"
+          }
+        }
       },
       "active": {
-        "label": "ी"
+        "label": "ी",
+        "popup": {
+          "main": {
+            "label": "ई"
+          }
+        }
       }
     },
     {
       "$": "desh_hindi_vowel_selector",
       "default": {
-        "label": "उ"
+        "label": "उ",
+        "popup": {
+          "main": {
+            "label": "ु"
+          }
+        }
       },
       "active": {
-        "label": "ु"
+        "label": "ु",
+        "popup": {
+          "main": {
+            "label": "उ"
+          }
+        }
       }
     },
     {
       "$": "desh_hindi_vowel_selector",
       "default": {
-        "label": "ऊ"
+        "label": "ऊ",
+        "popup": {
+          "main": {
+            "label": "ू"
+          }
+        }
       },
       "active": {
-        "label": "ू"
+        "label": "ू",
+        "popup": {
+          "main": {
+            "label": "ऊ"
+          }
+        }
       }
     },
     {
       "$": "desh_hindi_vowel_selector",
       "default": {
-        "label": "ए"
+        "label": "ए",
+        "popup": {
+          "main": {
+            "label": "े"
+          }
+        }
       },
       "active": {
-        "label": "े"
+        "label": "े",
+        "popup": {
+          "main": {
+            "label": "ए"
+          }
+        }
       }
     },
     {
       "$": "desh_hindi_vowel_selector",
       "default": {
-        "label": "ऐ"
+        "label": "ऐ",
+        "popup": {
+          "main": {
+            "label": "ै"
+          },
+          "relevant": [
+            {
+              "label": "ऍ"
+            },
+            {
+              "label": "ॅ"
+            }
+          ]
+        }
       },
       "active": {
-        "label": "ै"
+        "label": "ै",
+        "popup": {
+          "main": {
+            "label": "ऐ"
+          },
+          "relevant": [
+            {
+              "label": "ऍ"
+            },
+            {
+              "label": "ॅ"
+            }
+          ]
+        }
       }
     },
     {
       "$": "desh_hindi_vowel_selector",
       "default": {
-        "label": "ओ"
+        "label": "ओ",
+        "popup": {
+          "main": {
+            "label": "ो"
+          },
+          "relevant": [
+            {
+              "label": "ऑ"
+            },
+            {
+              "label": "ॉ"
+            },
+            {
+              "label": "ॐ"
+            }
+          ]
+        }
       },
       "active": {
-        "label": "ो"
+        "label": "ो",
+        "popup": {
+          "main": {
+            "label": "ओ"
+          },
+          "relevant": [
+            {
+              "label": "ऑ"
+            },
+            {
+              "label": "ॉ"
+            }
+          ]
+        }
       }
     },
     {
       "$": "desh_hindi_vowel_selector",
       "default": {
-        "label": "औ"
+        "label": "औ",
+        "popup": {
+          "main": {
+            "label": "ौ"
+          }
+        }
       },
       "active": {
-        "label": "ौ"
-      }
-    },
-    {
-      "$": "desh_hindi_vowel_selector",
-      "default": {
-        "label": "ं"
-      },
-      "active": {
-        "label": "ँ"
+        "label": "ौ",
+        "popup": {
+          "main": {
+            "label": "औ"
+          }
+        }
       }
     }
   ],
@@ -105,17 +222,29 @@
       "label": "क",
       "popup": {
         "main": {
-          "label": "क्र"
+          "label": "कं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "क्"
+            "label": "क्",
+            "labelFlags": 128
           },
           {
-            "label": "क़"
+            "label": "क़",
+            "labelFlags": 128
           },
           {
-            "label": "क्त"
+            "label": "क़्",
+            "labelFlags": 128
+          },
+          {
+            "label": "क्र",
+            "labelFlags": 128
+          },
+          {
+            "label": "क्त",
+            "labelFlags": 128
           },
           {
             "label": "क्ष",
@@ -128,14 +257,29 @@
       "label": "ख",
       "popup": {
         "main": {
-          "label": "ख्र"
+          "label": "खं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "ख्"
+            "label": "ख्",
+            "labelFlags": 128
           },
           {
-            "label": "ख़"
+            "label": "ख़",
+            "labelFlags": 128
+          },
+          {
+            "label": "ख़ं",
+            "labelFlags": 128
+          },
+          {
+            "label": "ख़्",
+            "labelFlags": 128
+          },
+          {
+            "label": "ख्य",
+            "labelFlags": 128
           }
         ]
       }
@@ -144,17 +288,25 @@
       "label": "ग",
       "popup": {
         "main": {
-          "label": "ग्र"
+          "label": "गं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "ग्"
+            "label": "ग़",
+            "labelFlags": 128
           },
           {
-            "label": "ग़"
+            "label": "ग्",
+            "labelFlags": 128
           },
           {
-            "label": "ग्य"
+            "label": "ग़्",
+            "labelFlags": 128
+          },
+          {
+            "label": "ग्र",
+            "labelFlags": 128
           }
         ]
       }
@@ -163,11 +315,20 @@
       "label": "घ",
       "popup": {
         "main": {
-          "label": "घ्र"
+          "label": "ङ"
         },
         "relevant": [
           {
-            "label": "घ्"
+            "label": "घं",
+            "labelFlags": 128
+          },
+          {
+            "label": "घ्",
+            "labelFlags": 128
+          },
+          {
+            "label": "घ्न",
+            "labelFlags": 128
           }
         ]
       }
@@ -176,14 +337,13 @@
       "label": "च",
       "popup": {
         "main": {
-          "label": "च्र"
+          "label": "चं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "च्"
-          },
-          {
-            "label": "च्य"
+            "label": "च्",
+            "labelFlags": 128
           }
         ]
       }
@@ -192,11 +352,13 @@
       "label": "छ",
       "popup": {
         "main": {
-          "label": "छ्र"
+          "label": "छं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "छ्"
+            "label": "छ्",
+            "labelFlags": 128
           }
         ]
       }
@@ -205,17 +367,32 @@
       "label": "ज",
       "popup": {
         "main": {
-          "label": "ज्र"
+          "label": "जं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "ज्"
+            "label": "ज़्",
+            "labelFlags": 128
           },
           {
-            "label": "ज़"
+            "label": "ज़",
+            "labelFlags": 128
+          },
+          {
+            "label": "ज्",
+            "labelFlags": 128
+          },
+          {
+            "label": "ज़ं",
+            "labelFlags": 128
           },
           {
             "label": "ज्ञ",
+            "labelFlags": 128
+          },
+          {
+            "label": "ज्य",
             "labelFlags": 128
           }
         ]
@@ -225,17 +402,27 @@
       "label": "झ",
       "popup": {
         "main": {
-          "label": "झ्र"
+          "label": "ञ"
         },
         "relevant": [
           {
-            "label": "झ्"
+            "label": "झं",
+            "labelFlags": 128
+          },
+          {
+            "label": "झ़्",
+            "labelFlags": 128
+          },
+          {
+            "label": "झ़",
+            "labelFlags": 128
+          },
+          {
+            "label": "झ्",
+            "labelFlags": 128
           }
         ]
       }
-    },
-    {
-      "label": "ञ"
     },
     {
       "label": "ं"
@@ -246,62 +433,196 @@
   ],
   [
     {
-      "label": "ट"
-    },
-    {
-      "label": "ठ"
-    },
-    {
-      "label": "ड",
+      "label": "ट",
       "popup": {
         "main": {
-          "label": "ड़"
-        }
-      }
-    },
-    {
-      "label": "ढ",
-      "popup": {
-        "main": {
-          "label": "ढ़"
-        }
-      }
-    },
-    {
-      "label": "ण"
-    },
-    {
-      "label": "त",
-      "popup": {
-        "main": {
-          "label": "त्र",
+          "label": "टं",
           "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "त्"
-          },
-          {
-            "label": "त्य"
-          },
-          {
-            "label": "त्व"
+            "label": "ट्",
+            "labelFlags": 128
           }
         ]
       }
     },
     {
-      "label": "थ"
+      "label": "ठ",
+      "popup": {
+        "main": {
+          "label": "ठं",
+          "labelFlags": 128
+        },
+        "relevant": [
+          {
+            "label": "ठ्",
+            "labelFlags": 128
+          }
+        ]
+      }
+    },
+    {
+      "label": "ड",
+      "popup": {
+        "main": {
+          "label": "डं",
+          "labelFlags": 128
+        },
+        "relevant": [
+          {
+            "label": "ड़",
+            "labelFlags": 128
+          },
+          {
+            "label": "ड्",
+            "labelFlags": 128
+          },
+          {
+            "label": "ड़ं",
+            "labelFlags": 128
+          },
+          {
+            "label": "ङं",
+            "labelFlags": 128
+          },
+          {
+            "label": "ड़्",
+            "labelFlags": 128
+          },
+          {
+            "label": "ङ"
+          },
+          {
+            "label": "ङ्",
+            "labelFlags": 128
+          }
+        ]
+      }
+    },
+    {
+      "label": "ढ"
+    },
+    {
+      "label": "ण",
+      "popup": {
+        "main": {
+          "label": "णं",
+          "labelFlags": 128
+        },
+        "relevant": [
+          {
+            "label": "ण्",
+            "labelFlags": 128
+          },
+          {
+            "label": "ण्ड",
+            "labelFlags": 128
+          }
+        ]
+      }
+    },
+    {
+      "label": "त",
+      "popup": {
+        "main": {
+          "label": "तं",
+          "labelFlags": 128
+        },
+        "relevant": [
+          {
+            "label": "त्र",
+            "labelFlags": 128
+          },
+          {
+            "label": "त्",
+            "labelFlags": 128
+          },
+          {
+            "label": "त्त",
+            "labelFlags": 128
+          },
+          {
+            "label": "त्थ",
+            "labelFlags": 128
+          },
+          {
+            "label": "त्न",
+            "labelFlags": 128
+          },
+          {
+            "label": "त्म",
+            "labelFlags": 128
+          },
+          {
+            "label": "त्य",
+            "labelFlags": 128
+          },
+          {
+            "label": "त्व",
+            "labelFlags": 128
+          }
+        ]
+      }
+    },
+    {
+      "label": "थ",
+      "popup": {
+        "main": {
+          "label": "थं",
+          "labelFlags": 128
+        },
+        "relevant": [
+          {
+            "label": "थ्",
+            "labelFlags": 128
+          }
+        ]
+      }
     },
     {
       "label": "द",
       "popup": {
         "main": {
-          "label": "द्र"
+          "label": "दं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "द्"
+            "label": "द्",
+            "labelFlags": 128
+          },
+          {
+            "label": "द्र",
+            "labelFlags": 128
+          },
+          {
+            "label": "द्द",
+            "labelFlags": 128
+          },
+          {
+            "label": "द्ध",
+            "labelFlags": 128
+          },
+          {
+            "label": "द्ब",
+            "labelFlags": 128
+          },
+          {
+            "label": "द्भ",
+            "labelFlags": 128
+          },
+          {
+            "label": "द्म",
+            "labelFlags": 128
+          },
+          {
+            "label": "द्व",
+            "labelFlags": 128
+          },
+          {
+            "label": "दृ",
+            "labelFlags": 128
           }
         ]
       }
@@ -310,11 +631,21 @@
       "label": "ध",
       "popup": {
         "main": {
-          "label": "ध्र"
+          "label": "धं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "ध्"
+            "label": "ध्",
+            "labelFlags": 128
+          },
+          {
+            "label": "ध्र",
+            "labelFlags": 128
+          },
+          {
+            "label": "ध्य",
+            "labelFlags": 128
           }
         ]
       }
@@ -323,23 +654,44 @@
       "label": "न",
       "popup": {
         "main": {
-          "label": "न्य"
+          "label": "नं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "न्"
+            "label": "न्",
+            "labelFlags": 128
           },
           {
-            "label": "ङ"
+            "label": "न्ट",
+            "labelFlags": 128
           },
           {
-            "label": "ञ"
+            "label": "न्त",
+            "labelFlags": 128
+          },
+          {
+            "label": "न्थ",
+            "labelFlags": 128
+          },
+          {
+            "label": "न्द",
+            "labelFlags": 128
+          },
+          {
+            "label": "न्न",
+            "labelFlags": 128
+          },
+          {
+            "label": "न्य",
+            "labelFlags": 128
+          },
+          {
+            "label": "न्ह",
+            "labelFlags": 128
           }
         ]
       }
-    },
-    {
-      "label": "-"
     }
   ],
   [
@@ -347,21 +699,33 @@
       "label": "प",
       "popup": {
         "main": {
-          "label": "प्र",
+          "label": "पं",
           "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "प्"
+            "label": "प्",
+            "labelFlags": 128
           },
           {
-            "label": "प्य"
+            "label": "प्र",
+            "labelFlags": 128
           },
           {
-            "label": "प्त"
+            "label": "प्य",
+            "labelFlags": 128
           },
           {
-            "label": "प्ल"
+            "label": "प्त",
+            "labelFlags": 128
+          },
+          {
+            "label": "प्प",
+            "labelFlags": 128
+          },
+          {
+            "label": "प्ल",
+            "labelFlags": 128
           }
         ]
       }
@@ -370,14 +734,33 @@
       "label": "फ",
       "popup": {
         "main": {
-          "label": "फ़"
+          "label": "फं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "फ्"
+            "label": "फ्",
+            "labelFlags": 128
           },
           {
-            "label": "फ्र"
+            "label": "फ़",
+            "labelFlags": 128
+          },
+          {
+            "label": "फ़ं",
+            "labelFlags": 128
+          },
+          {
+            "label": "फ़्",
+            "labelFlags": 128
+          },
+          {
+            "label": "फ्र",
+            "labelFlags": 128
+          },
+          {
+            "label": "फ्त",
+            "labelFlags": 128
           }
         ]
       }
@@ -386,14 +769,33 @@
       "label": "ब",
       "popup": {
         "main": {
-          "label": "ब्र"
+          "label": "बं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "ब्"
+            "label": "ब्",
+            "labelFlags": 128
           },
           {
-            "label": "ब्ल"
+            "label": "ब्र",
+            "labelFlags": 128
+          },
+          {
+            "label": "ब्ज",
+            "labelFlags": 128
+          },
+          {
+            "label": "ब्द",
+            "labelFlags": 128
+          },
+          {
+            "label": "ब्ब",
+            "labelFlags": 128
+          },
+          {
+            "label": "ब्ल",
+            "labelFlags": 128
           }
         ]
       }
@@ -402,11 +804,21 @@
       "label": "भ",
       "popup": {
         "main": {
-          "label": "भ्र"
+          "label": "भं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "भ्"
+            "label": "भ्",
+            "labelFlags": 128
+          },
+          {
+            "label": "भ्र",
+            "labelFlags": 128
+          },
+          {
+            "label": "भ्य",
+            "labelFlags": 128
           }
         ]
       }
@@ -415,14 +827,49 @@
       "label": "म",
       "popup": {
         "main": {
-          "label": "म्र"
+          "label": "मं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "म्"
+            "label": "म्",
+            "labelFlags": 128
           },
           {
-            "label": "म्य"
+            "label": "म्र",
+            "labelFlags": 128
+          },
+          {
+            "label": "म्च",
+            "labelFlags": 128
+          },
+          {
+            "label": "म्ट",
+            "labelFlags": 128
+          },
+          {
+            "label": "म्त",
+            "labelFlags": 128
+          },
+          {
+            "label": "म्प",
+            "labelFlags": 128
+          },
+          {
+            "label": "म्ब",
+            "labelFlags": 128
+          },
+          {
+            "label": "म्म",
+            "labelFlags": 128
+          },
+          {
+            "label": "म्य",
+            "labelFlags": 128
+          },
+          {
+            "label": "म्ह",
+            "labelFlags": 128
           }
         ]
       }
@@ -431,11 +878,25 @@
       "label": "य",
       "popup": {
         "main": {
-          "label": "य्"
+          "label": "यं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "य्र"
+            "label": "य़्",
+            "labelFlags": 128
+          },
+          {
+            "label": "य़",
+            "labelFlags": 128
+          },
+          {
+            "label": "य्",
+            "labelFlags": 128
+          },
+          {
+            "label": "य़ं",
+            "labelFlags": 128
           }
         ]
       }
@@ -444,23 +905,85 @@
       "label": "र",
       "popup": {
         "main": {
-          "label": "र्"
+          "label": "रं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "र्क"
+            "label": "्र",
+            "labelFlags": 128
           },
           {
-            "label": "र्ग"
+            "label": "र्",
+            "labelFlags": 128
           },
           {
-            "label": "र्त"
+            "label": "र्र",
+            "labelFlags": 128
           },
           {
-            "label": "र्म"
+            "label": "र्क",
+            "labelFlags": 128
           },
           {
-            "label": "र्य"
+            "label": "र्ग",
+            "labelFlags": 128
+          },
+          {
+            "label": "र्च",
+            "labelFlags": 128
+          },
+          {
+            "label": "र्ज",
+            "labelFlags": 128
+          },
+          {
+            "label": "र्त",
+            "labelFlags": 128
+          },
+          {
+            "label": "र्थ",
+            "labelFlags": 128
+          },
+          {
+            "label": "र्द",
+            "labelFlags": 128
+          },
+          {
+            "label": "र्न",
+            "labelFlags": 128
+          },
+          {
+            "label": "र्म",
+            "labelFlags": 128
+          },
+          {
+            "label": "र्श",
+            "labelFlags": 128
+          },
+          {
+            "label": "र्ष",
+            "labelFlags": 128
+          },
+          {
+            "label": "र्स",
+            "labelFlags": 128
+          },
+          {
+            "label": "र्प",
+            "labelFlags": 128
+          },
+          {
+            "label": "र्ट",
+            "labelFlags": 128
+          },
+          {
+            "label": "र्ख",
+            "labelFlags": 128
+          },
+          {
+            "label": "र्य",
+            "labelFlags": 128
           }
         ]
       }
@@ -469,14 +992,33 @@
       "label": "ल",
       "popup": {
         "main": {
-          "label": "ल्य"
+          "label": "लं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "ल्"
+            "label": "ल्",
+            "labelFlags": 128
           },
           {
-            "label": "ल्ल"
+            "label": "ल्य",
+            "labelFlags": 128
+          },
+          {
+            "label": "ल्ट",
+            "labelFlags": 128
+          },
+          {
+            "label": "ल्प",
+            "labelFlags": 128
+          },
+          {
+            "label": "ल्ब",
+            "labelFlags": 128
+          },
+          {
+            "label": "ल्ह",
+            "labelFlags": 128
           }
         ]
       }
@@ -485,14 +1027,21 @@
       "label": "व",
       "popup": {
         "main": {
-          "label": "व्र"
+          "label": "वं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "व्"
+            "label": "व्",
+            "labelFlags": 128
           },
           {
-            "label": "व्य"
+            "label": "व्र",
+            "labelFlags": 128
+          },
+          {
+            "label": "व्य",
+            "labelFlags": 128
           }
         ]
       }
@@ -501,32 +1050,25 @@
       "label": "श",
       "popup": {
         "main": {
-          "label": "श्र",
+          "label": "शं",
           "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "श्"
+            "label": "श्",
+            "labelFlags": 128
           },
           {
-            "label": "श्च"
+            "label": "श्र",
+            "labelFlags": 128
           },
           {
-            "label": "श्व"
-          }
-        ]
-      }
-    },
-    {
-      "label": "क्ष",
-      "labelFlags": 128,
-      "popup": {
-        "relevant": [
-          {
-            "label": "क्षं"
+            "label": "श्च",
+            "labelFlags": 128
           },
           {
-            "label": "क्ष्"
+            "label": "श्व",
+            "labelFlags": 128
           }
         ]
       }
@@ -534,20 +1076,67 @@
   ],
   [
     {
-      "label": "ष"
+      "label": "ष",
+      "popup": {
+        "main": {
+          "label": "षं",
+          "labelFlags": 128
+        },
+        "relevant": [
+          {
+            "label": "ष्",
+            "labelFlags": 128
+          },
+          {
+            "label": "ष्य",
+            "labelFlags": 128
+          },
+          {
+            "label": "ष्ट",
+            "labelFlags": 128
+          },
+          {
+            "label": "ष्ण",
+            "labelFlags": 128
+          },
+          {
+            "label": "ष्प",
+            "labelFlags": 128
+          },
+          {
+            "label": "ष्क",
+            "labelFlags": 128
+          }
+        ]
+      }
     },
     {
       "label": "स",
       "popup": {
         "main": {
-          "label": "स्"
+          "label": "सं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "स्र"
+            "label": "स्",
+            "labelFlags": 128
           },
           {
-            "label": "स्व"
+            "label": "स्ट",
+            "labelFlags": 128
+          },
+          {
+            "label": "स्त",
+            "labelFlags": 128
+          },
+          {
+            "label": "स्र",
+            "labelFlags": 128
+          },
+          {
+            "label": "स्य",
+            "labelFlags": 128
           }
         ]
       }
@@ -556,45 +1145,82 @@
       "label": "ह",
       "popup": {
         "main": {
-          "label": "ह्र"
+          "label": "हं",
+          "labelFlags": 128
         },
         "relevant": [
           {
-            "label": "ह्"
+            "label": "ह्",
+            "labelFlags": 128
           },
           {
-            "label": "ह्म"
+            "label": "ह्म",
+            "labelFlags": 128
+          },
+          {
+            "label": "ह्र",
+            "labelFlags": 128
           }
         ]
       }
-    },
-    {
-      "label": "त्र",
-      "labelFlags": 128
     },
     {
       "label": "ज्ञ",
       "labelFlags": 128
     },
     {
+      "label": "क्ष",
+      "labelFlags": 128,
+      "popup": {
+        "main": {
+          "label": "क्षं",
+          "labelFlags": 128
+        },
+        "relevant": [
+          {
+            "label": "क्ष्",
+            "labelFlags": 128
+          }
+        ]
+      }
+    },
+    {
       "label": "श्र",
       "labelFlags": 128
     },
     {
-      "label": "ऋ"
+      "$": "desh_hindi_vowel_selector",
+      "default": {
+        "label": "ऋ",
+        "popup": {
+          "main": {
+            "label": "ृ"
+          }
+        }
+      },
+      "active": {
+        "label": "ृ",
+        "popup": {
+          "main": {
+            "label": "ऋ"
+          }
+        }
+      }
     },
     {
-      "label": "ॐ"
+      "label": "ः",
+      "popup": {
+        "main": {
+          "label": "़"
+        }
+      }
     },
     {
-      "label": "ः"
+      "label": "्"
     },
     {
-      "label": "्",
-      "labelFlags": 128
-    },
-    {
-      "label": "़"
+      "label": "delete",
+      "width": -1
     }
   ]
 ]

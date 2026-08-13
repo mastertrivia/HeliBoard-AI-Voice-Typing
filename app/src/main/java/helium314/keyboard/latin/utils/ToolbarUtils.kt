@@ -74,6 +74,7 @@ fun getCodeForToolbarKey(key: ToolbarKey) = Settings.getInstance().getCustomTool
     AI_VOICE -> KeyCode.AI_VOICE_INPUT
     PREVIOUS_API -> KeyCode.AI_VOICE_PREVIOUS_PROFILE
     NEXT_API -> KeyCode.AI_VOICE_NEXT_PROFILE
+    TRANSLATE -> KeyCode.DESH_TRANSLATE
     VOICE -> KeyCode.VOICE_INPUT
     CLIPBOARD -> KeyCode.CLIPBOARD
     NUMPAD -> KeyCode.NUMPAD
@@ -133,7 +134,7 @@ fun getCodeForToolbarKeyLongClick(key: ToolbarKey) = Settings.getInstance().getC
 enum class ToolbarKey {
     // AI Voice Typing is the first item in the toolbar key lists.
     // It is separate from VOICE (platform voice input) so both can coexist independently.
-    AI_VOICE, PREVIOUS_API, NEXT_API, VOICE, CLIPBOARD, NUMPAD, DPAD, UNDO, REDO, SETTINGS, SELECT_ALL, SELECT_WORD, COPY, CUT, PASTE, ONE_HANDED, FLOATING, SPLIT,
+    AI_VOICE, PREVIOUS_API, NEXT_API, TRANSLATE, VOICE, CLIPBOARD, NUMPAD, DPAD, UNDO, REDO, SETTINGS, SELECT_ALL, SELECT_WORD, COPY, CUT, PASTE, ONE_HANDED, FLOATING, SPLIT,
     INCOGNITO, AUTOCORRECT, CLEAR_CLIPBOARD, CLOSE_HISTORY, EMOJI, LEFT, RIGHT, UP, DOWN, WORD_LEFT, WORD_RIGHT,
     PAGE_UP, PAGE_DOWN, FULL_LEFT, FULL_RIGHT, PAGE_START, PAGE_END, BACKGROUND_GATHERING
 }
@@ -146,7 +147,7 @@ val toolbarKeyStrings = entries.associateWithTo(EnumMap(ToolbarKey::class.java))
 
 val defaultToolbarPref by lazy {
     // AI_VOICE is the first item in the list, above SETTINGS
-    val default = listOf(AI_VOICE, SETTINGS, VOICE, CLIPBOARD, UNDO, REDO, SELECT_WORD, COPY, PASTE, LEFT, RIGHT)
+    val default = listOf(AI_VOICE, TRANSLATE, SETTINGS, VOICE, CLIPBOARD, UNDO, REDO, SELECT_WORD, COPY, PASTE, LEFT, RIGHT)
     val others = entries.filterNot { it in default || it == CLOSE_HISTORY }
     default.joinToString(Separators.ENTRY) { it.name + Separators.KV + true } + Separators.ENTRY +
             others.joinToString(Separators.ENTRY) { it.name + Separators.KV + false }

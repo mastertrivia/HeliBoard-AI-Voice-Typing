@@ -191,6 +191,13 @@ object KeyCode {
     const val AI_VOICE_PREVIOUS_PROFILE = -10056
     const val AI_VOICE_NEXT_PROFILE =     -10057
 
+    // Desh Hindi keyboard: code for the अ key in vowel mode, which resets the vowel
+    // diacritic state without inserting text (Desh's key_native_no_input_vowel = -28
+    // collides with MOVE_END_OF_LINE above, so it lives in the app-internal range).
+    const val DESH_NO_INPUT_VOWEL =       -10058
+    // Desh translation panel toggle (referenced by the TRANSLATE toolbar key).
+    const val DESH_TRANSLATE =             -10059
+
     // Valid in popups and for toolbar key long press only
     const val KEY_REPEAT =                -11000
 
@@ -217,8 +224,9 @@ object KeyCode {
         MEDIA_PREVIOUS, VOL_UP, VOL_DOWN, MUTE, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12, BACK,
         TIMESTAMP, CTRL_LEFT, CTRL_RIGHT, ALT_LEFT, ALT_RIGHT, META_LEFT, META_RIGHT, SEND_INTENT_ONE, SEND_INTENT_TWO,
         SEND_INTENT_THREE, EMOJI_SEARCH, INLINE_EMOJI_SEARCH_DONE, META_LOCK,
-        BACKGROUND_GATHERING, BACKGROUND_GATHERING_TEMP_OFF, DPAD,
+        BACKGROUND_GATHERING, BACKGROUND_GATHERING_TEMP_OFF, DPAD, DESH_TRANSLATE,
         AI_VOICE_INPUT, AI_VOICE_PREVIOUS_PROFILE, AI_VOICE_NEXT_PROFILE,
+        DESH_NO_INPUT_VOWEL,
         -> this
 
         KEY_REPEAT if (longPress) -> this

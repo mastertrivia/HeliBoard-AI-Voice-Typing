@@ -731,6 +731,12 @@ New dictionary:
     <!-- Option for setting navbar to follow keyboard color -->
     <string name="theme_navbar">Color navigation bar</string>
     <!-- Theme name for light theme -->
+    <!-- Desboard built-in themes copied into HeliBoard's native Colours theme system. -->
+    <string name="theme_name_desboard_default_auto" tools:keep="@string/theme_name_desboard_default_auto">Desboard Default (Auto)</string>
+    <string name="theme_name_desboard_dark" tools:keep="@string/theme_name_desboard_dark">Desboard Dark</string>
+    <string name="theme_name_desboard_light" tools:keep="@string/theme_name_desboard_light">Desboard Light</string>
+    <string name="theme_name_desboard_high_contrast_blue" tools:keep="@string/theme_name_desboard_high_contrast_blue">Desboard High Contrast Blue</string>
+    <string name="theme_name_desboard_high_contrast_yellow" tools:keep="@string/theme_name_desboard_high_contrast_yellow">Desboard High Contrast Yellow</string>
     <string name="theme_name_light" tools:keep="@string/theme_name_light">Light</string>
     <!-- Theme name for holo white theme -->
     <string name="theme_name_holo_white" tools:keep="@string/theme_name_holo_white">Holo White</string>
@@ -823,6 +829,19 @@ New dictionary:
     <string name="gnu_gpl">GNU General Public License v3.0</string>
     <!-- Button to close a dialog where neither "ok" nor "cancel" are suitable. Preferably 10 characters or less. -->
     <string name="dialog_close">Close</string>
+    <string name="translate">Translate</string>
+    <string name="translate_switch_languages">Switch translation languages</string>
+    <string name="translate_close">Close translation</string>
+    <string name="translate_language_hindi">Hindi</string>
+    <string name="translate_language_english">English</string>
+    <string name="translate_hint_to_english">अंग्रेजी में बदलने के लिए यहां लिखें</string>
+    <string name="translate_hint_to_hindi">हिन्दी में बदलने के लिए यहां लिखें</string>
+    <string name="translate_hint_generic">Type text to translate</string>
+    <string name="translate_speak">Speak</string>
+    <string name="translate_stop_speaking">Stop</string>
+    <string name="translate_search_language">Search language</string>
+    <string name="translate_select_source">Select source language</string>
+    <string name="translate_select_target">Select target language</string>
     <!-- Hint for users to tap the languages for settings -->
     <string name="text_tap_languages">Tap the language to open settings</string>
     <!-- Title of internal InputMethodPicker, strings should be same as the ones from Android system -->
