@@ -849,8 +849,8 @@ public class LatinIME extends InputMethodService implements
     }
 
     private boolean isDeshHindiSubtype() {
-        return "hi".equals(mRichImm.getCurrentSubtype().locale.getLanguage())
-                && "desh_hindi".equals(mRichImm.getCurrentSubtype().mainLayoutName);
+        return "hi".equals(mRichImm.getCurrentSubtype().getLocale().getLanguage())
+                && "desh_hindi".equals(mRichImm.getCurrentSubtype().getMainLayoutName());
     }
 
     private static boolean isDevanagariConsonant(final int codePoint) {
@@ -1609,7 +1609,7 @@ public class LatinIME extends InputMethodService implements
         final InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;
         final SpeechnotesVoiceResultProcessor.ProcessedResult processed =
-                SpeechnotesVoiceResultProcessor.process(
+                SpeechnotesVoiceResultProcessor.INSTANCE.process(
                         text, mRichImm.getCurrentSubtypeLocale());
         if (processed.getText().isEmpty()) return;
         ic.commitText(processed.getText() +
