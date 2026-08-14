@@ -589,25 +589,27 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         pinnedKeys.findViewWithTag<View>(ToolbarKey.VOICE)?.isVisible = true
     }
 
-    private var voiceListeningDrawable: AnimatedVectorDrawable? = null
-
-    fun setVoiceListening(listening: Boolean) {
-        val button = toolbar.findViewWithTag<ImageButton>(ToolbarKey.VOICE)
-            ?: pinnedKeys.findViewWithTag<ImageButton>(ToolbarKey.VOICE)
-            ?: return
+    private fun setVoiceListening(button: ImageButton, listening: Boolean) {
         if (listening) {
             val drawable = ContextCompat.getDrawable(context, R.drawable.ic_sound_bars_anim)
             if (drawable is AnimatedVectorDrawable) {
-                voiceListeningDrawable?.stop()
-                voiceListeningDrawable = drawable
+                (button.drawable as? AnimatedVectorDrawable)?.stop()
                 button.setImageDrawable(drawable)
                 drawable.start()
             }
         } else {
-            voiceListeningDrawable?.stop()
-            voiceListeningDrawable = null
+            (button.drawable as? AnimatedVectorDrawable)?.stop()
             button.setImageDrawable(KeyboardIconsSet.instance.getNewDrawable(ToolbarKey.VOICE.name, context))
         }
+    }
+
+    // Update every VOICE instance (expanded toolbar AND pinned copy), mirroring
+    // updateAiVoiceToolbarVisuals() which iterates both groups. The pinned copy
+    // is created via addKeyToPinnedKeys() and is a separate view that otherwise
+    // never receives the listening drawable swap.
+    fun setVoiceListening(listening: Boolean) {
+        toolbar.findViewWithTag<ImageButton>(ToolbarKey.VOICE)?.let { setVoiceListening(it, listening) }
+        pinnedKeys.findViewWithTag<ImageButton>(ToolbarKey.VOICE)?.let { setVoiceListening(it, listening) }
     }
 
     private fun updateKeys() {

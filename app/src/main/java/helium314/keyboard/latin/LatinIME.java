@@ -71,8 +71,7 @@ import helium314.keyboard.latin.settings.Settings;
 import helium314.keyboard.latin.settings.SettingsValues;
 import helium314.keyboard.latin.suggestions.SuggestionStripView;
 import helium314.keyboard.latin.suggestions.SuggestionStripViewAccessor;
-import helium314.keyboard.latin.voice.ContinuousSpeechRecognizer;
-import helium314.keyboard.latin.voice.SpeechnotesVoiceResultProcessor;
+import helium314.keyboard.voice.SpeechNotesVoiceEngine;
 import helium314.keyboard.latin.translation.DeshTranslationView;
 import helium314.keyboard.latin.touchinputconsumer.GestureConsumer;
 import helium314.keyboard.latin.utils.ColorUtilKt;
@@ -150,7 +149,7 @@ public class LatinIME extends InputMethodService implements
     @Nullable
     private AiVoiceSessionController mAiVoiceSessionController;
     @Nullable
-    private ContinuousSpeechRecognizer mContinuousSpeechRecognizer;
+    private SpeechNotesVoiceEngine mVoiceEngine;
 
     private RichInputMethodManager mRichImm;
     /**
@@ -572,6 +571,10 @@ public class LatinIME extends InputMethodService implements
             // AI Voice is optional; its initialization must not prevent the IME from opening.
             Log.e(TAG, "Could not initialize AI Voice", e);
         }
+        // The ported Speech Notes voice engine. It must be created here so the
+        // mic key (keyboard layout or toolbar) drives startOrPause() instead of
+        // the system shortcut-IME handoff.
+        mVoiceEngine = new SpeechNotesVoiceEngine(this);
 
         loadSettings();
         mClipboardHistoryManager.onCreate();
@@ -717,9 +720,9 @@ public class LatinIME extends InputMethodService implements
 
     @Override
     public void onDestroy() {
-        if (mContinuousSpeechRecognizer != null) {
-            mContinuousSpeechRecognizer.destroy();
-            mContinuousSpeechRecognizer = null;
+        if (mVoiceEngine != null) {
+            mVoiceEngine.stop();
+            mVoiceEngine = null;
         }
         if (mAiVoiceSessionController != null) {
             mAiVoiceSessionController.onImeDestroyed();
@@ -819,6 +822,17 @@ public class LatinIME extends InputMethodService implements
         }
     }
 
+    /**
+     * Called by the ported Speech Notes engine whenever the listening state
+     * changes (onListening/onConnecting/onAboutToReconnect -> true, stop -> false).
+     * Drives the animated three-bar indicator on every VOICE toolbar key — both
+     * the expanded-toolbar instance and the pinned copy.
+     */
+    public void onVoiceEngineListeningStateChanged(boolean listening) {
+        if (mSuggestionStripView != null)
+            mSuggestionStripView.setVoiceListening(listening);
+    }
+
     @Override
     public void setCandidatesView(final View view) {
         // To ensure that CandidatesView will never be set.
@@ -840,10 +854,8 @@ public class LatinIME extends InputMethodService implements
         // Collapsing/hiding the keyboard must end continuous Voice immediately.
         // Do this here (rather than waiting for onFinishInput()) because the
         // input connection may remain alive while the IME view itself is hidden.
-        if (mContinuousSpeechRecognizer != null
-                && mContinuousSpeechRecognizer.isListening()) {
-            mContinuousSpeechRecognizer.stop();
-        }
+        if (mVoiceEngine != null)
+            mVoiceEngine.stopIfListening();
         StatsUtils.onFinishInputView();
         mHandler.onFinishInputView(finishingInput);
         if (mDeshTranslationView != null && mDeshTranslationView.isOpen()) mDeshTranslationView.hidePanel(true);
@@ -855,8 +867,8 @@ public class LatinIME extends InputMethodService implements
     @Override
     public void onFinishInput() {
         if (mDeshTranslationView != null && mDeshTranslationView.isOpen()) mDeshTranslationView.hidePanel(true);
-        if (mContinuousSpeechRecognizer != null)
-            mContinuousSpeechRecognizer.stop();
+        if (mVoiceEngine != null)
+            mVoiceEngine.stopIfListening();
         mHandler.onFinishInput();
         BackgroundGatheringCache.saveOrClear(this);
     }
@@ -923,9 +935,10 @@ public class LatinIME extends InputMethodService implements
                 mSettings.getCurrent());
         // Voice follows the active HeliBoard language even when the user
         // changes subtype while continuous Voice is already running.
-        if (mContinuousSpeechRecognizer != null
-                && mContinuousSpeechRecognizer.isListening()) {
-            mContinuousSpeechRecognizer.updateLocale(mRichImm.getCurrentSubtypeLocale());
+        if (mVoiceEngine != null) {
+            final Locale voiceLocale = mRichImm.getCurrentSubtypeLocale();
+            if (voiceLocale != null)
+                mVoiceEngine.setLanguage(voiceLocale.toLanguageTag());
         }
         mDeshHindiVowelDiacriticMode = computeDeshHindiVowelDiacriticMode();
         loadKeyboard();
@@ -1550,8 +1563,24 @@ public class LatinIME extends InputMethodService implements
         if (mAiVoiceSessionController != null)
             mAiVoiceSessionController.onInputInteraction();
         if (KeyCode.VOICE_INPUT == event.getKeyCode()) {
-            toggleContinuousVoiceInput();
+            if (mVoiceEngine != null)
+                mVoiceEngine.startOrPause();
             return;
+        }
+        // While listening, typed characters and backspace are routed through the
+        // engine so dictation keeps running while the keyboard is touched/used.
+        if (mVoiceEngine != null && mVoiceEngine.isListening()) {
+            if (KeyCode.DELETE == event.getKeyCode()) {
+                mVoiceEngine.deleteChar();
+                return;
+            }
+            if (!event.isFunctionalKeyEvent()) {
+                final CharSequence text = event.getTextToCommit();
+                if (text != null && text.length() > 0) {
+                    mVoiceEngine.typeText(text.toString());
+                    return;
+                }
+            }
         }
         // Normal keyboard interaction MUST NOT stop continuous Voice.
         // The reference continuous-dictation behavior keeps the microphone/
@@ -1584,109 +1613,6 @@ public class LatinIME extends InputMethodService implements
             final InputConnection ic = getCurrentInputConnection();
             if (ic != null) ic.finishComposingText();
             mDeshTranslationView.showPanel();
-        }
-    }
-
-    private void toggleContinuousVoiceInput() {
-        if (mContinuousSpeechRecognizer != null && mContinuousSpeechRecognizer.isListening()) {
-            mContinuousSpeechRecognizer.stop();
-            return;
-        }
-        if (mContinuousSpeechRecognizer == null) {
-            mContinuousSpeechRecognizer = new ContinuousSpeechRecognizer(this,
-                    new ContinuousSpeechRecognizer.Callback() {
-                        @Override
-                        public void onVoicePartialResult(String text) {
-                            // Speechkeys-style behavior: partial recognition is a
-                            // composing region in the target application's editor.
-                            // Do not render a duplicate transcription buffer inside
-                            // HeliBoard and do not permanently commit the unstable
-                            // hypothesis. Each new partial replaces the same composing
-                            // region until onResults() supplies the corrected final text.
-                            setVoiceComposingText(text);
-                        }
-
-                        @Override
-                        public void onVoiceFinalResult(String text) {
-                            // A natural recognition pause is the commit boundary.
-                            // commitVoiceText() replaces the active composing region
-                            // with the processed/corrected final result, then the
-                            // recognizer immediately starts the next session.
-                            if (text == null || text.isEmpty()) return;
-                            commitVoiceText(text);
-                        }
-
-                        @Override
-                        public void onVoiceStoppedWithBuffer(String text) {
-                            // Explicit Voice-stop may leave one unfinished composing
-                            // segment because no natural onResults() arrived yet.
-                            // Finalize that exact composing text instead of losing it.
-                            if (text != null && !text.isEmpty()) {
-                                commitVoiceText(text);
-                            } else {
-                                finishVoiceComposingText();
-                            }
-                        }
-
-                        @Override
-                        public void onVoiceStateChanged(boolean listening) {
-                            // Normal Voice no longer owns the suggestion strip. The
-                            // keyboard keeps its normal height and UI throughout
-                            // continuous dictation.
-                            if (mSuggestionStripView != null)
-                                mSuggestionStripView.setVoiceListening(listening);
-                        }
-
-                        @Override
-                        public void onVoiceError(int errorCode) {
-                            // The controller performs bounded recovery for transient errors.
-                        }
-                    });
-        }
-        mContinuousSpeechRecognizer.start(mRichImm.getCurrentSubtypeLocale());
-    }
-
-    /**
-     * Mirrors the IME-side buffer behavior used by Speechkeys: unstable partial
-     * recognition is placed directly in the target editor as composing text.
-     * The composition is replaced in-place on every partial update and remains
-     * temporary until commitVoiceText() receives the natural-pause final result.
-     */
-    private void setVoiceComposingText(@Nullable String text) {
-        final InputConnection ic = getCurrentInputConnection();
-        if (ic == null) return;
-        final String composingText = text == null ? "" : text;
-        ic.setComposingText(composingText, 1);
-    }
-
-    /** Finalize/clear the active composition when Voice stops without a result. */
-    private void finishVoiceComposingText() {
-        final InputConnection ic = getCurrentInputConnection();
-        if (ic == null) return;
-        ic.finishComposingText();
-    }
-
-    private void commitVoiceText(@NonNull String text) {
-        final InputConnection ic = getCurrentInputConnection();
-        if (ic == null) return;
-        final SpeechnotesVoiceResultProcessor.ProcessedResult processed =
-                SpeechnotesVoiceResultProcessor.INSTANCE.process(
-                        text, mRichImm.getCurrentSubtypeLocale());
-        if (processed.getText().isEmpty()) {
-            // There is still an active composing region when this can happen,
-            // so explicitly finish it instead of leaving a stale transient
-            // recognition hypothesis in the editor.
-            ic.finishComposingText();
-            return;
-        }
-        // Because the active partial hypothesis was installed with
-        // setComposingText(), commitText() replaces that composing region rather
-        // than appending a duplicate copy. This is the key Speechkeys behavior.
-        ic.commitText(processed.getText() +
-                (processed.getAppendTrailingSpace() ? " " : ""), 1);
-        if (mInputLogic != null) {
-            mInputLogic.restartSuggestionsOnWordTouchedByCursor(
-                    mSettings.getCurrent(), mKeyboardSwitcher.getCurrentKeyboardScript());
         }
     }
 
