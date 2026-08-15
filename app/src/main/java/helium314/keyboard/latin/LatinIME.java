@@ -843,8 +843,9 @@ public class LatinIME extends InputMethodService implements
             mDeshTranslationEngine = new DeshTranslationEngine(this, new DeshTranslationHost() {
                 @Override public InputConnection getInputConnection() { return getCurrentInputConnection(); }
                 @Override public android.os.IBinder inputViewWindowToken() {
-                    return (getWindow() != null && getWindow().getDecorView() != null)
-                            ? getWindow().getDecorView().getWindowToken() : null;
+                    return (getWindow() != null && getWindow().getWindow() != null
+                            && getWindow().getWindow().getDecorView() != null)
+                            ? getWindow().getWindow().getDecorView().getWindowToken() : null;
                 }
                 @Override public String currentLanguageCode() {
                     return mRichImm.getCurrentSubtypeLocale().getLanguage();
@@ -854,7 +855,7 @@ public class LatinIME extends InputMethodService implements
                 }
             });
             mDeshTranslationView.setEngine(mDeshTranslationEngine);
-            mDeshTranslationEngine.view = mDeshTranslationView;
+            mDeshTranslationEngine.setView(mDeshTranslationView);
         }
     }
 
