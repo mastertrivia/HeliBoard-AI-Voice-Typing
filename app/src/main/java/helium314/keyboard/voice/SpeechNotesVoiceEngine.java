@@ -144,6 +144,14 @@ public class SpeechNotesVoiceEngine implements VoiceCallback {
     public void setLanguage(String lang) {
         this.language = lang;
         controller.setLanguage(lang);
+        // A long-lived SpeechRecognizer keeps transcribing in the language it
+        // was started with even if the intent is mutated afterwards. When the
+        // language is switched mid-dictation, recreate the recognizer so the
+        // new language applies to the next segment — without stopping the session.
+        if (controller.isListening()) {
+            controller.destroyRecognizer();
+            controller.restartListening(Boolean.TRUE);
+        }
     }
 
     /** Route a typed string: buffer it in the engine while composing, else commit. (was Speechkeys.y/x) */

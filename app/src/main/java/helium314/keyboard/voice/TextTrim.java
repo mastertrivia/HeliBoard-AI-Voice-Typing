@@ -1,143 +1,75 @@
-// Ported from SpeechNotes' c.c.b.b. Logic identical.
+// Ported from SpeechNotes' c.c.b.b, plus the spoken-punctuation layer that the
+// newer note app (n.b) added on top. The v2.0.2 keyboard built the language
+// tables but never used them; the note app wired them up so that a spoken
+// punctuation phrase at the end of a segment is converted to the real symbol.
+// Only that active layer is ported here — the keyboard's trim behavior and the
+// whole composing/commit flow are unchanged.
 package helium314.keyboard.voice;
 
 import java.util.Arrays;
+import java.util.List;
 
-/** Trim helpers (live) + language-specific punctuation dictionary (unused in this build, kept for fidelity). */
+/** Trim helpers (live) + language-specific spoken-punctuation dictionary. */
 public class TextTrim {
+    /** Spoken phrases that map to punctuation, per language (was c.c.b.b tables). */
+    private final List<String> spokenPunctuationPhrases;
+    /** The punctuation symbols the phrases map to, same order as the phrases. */
+    private final List<String> spokenPunctuationSymbols;
+
+    @SuppressWarnings("unused")
+    private final String language;
+
     public TextTrim(String str, Boolean bool) {
-        char c2;
-        String str2 = str.split("-", -1)[0];
-        switch (str2.hashCode()) {
-            case 3121:
-                if (str2.equals("ar")) {
-                    c2 = 7;
-                    break;
-                }
-                c2 = 65535;
+        this.language = str;
+        String lang = str.split("-", -1)[0];
+        switch (lang) {
+            case "ar":
+                spokenPunctuationPhrases = Arrays.asList("فترة", "فاصلة مفاصلة", "علامة استفهام", "نقطتان", "نقوطة", "طة التعجب", "علامة تعجب،", "خط جديد", "فقرة جديدة", "افتح القوسان", "أغلق القوسان", "الشرطة", "مبتسم", "وجه حزين", "الشرطة");
+                spokenPunctuationSymbols = Arrays.asList(".", ";", "?", ":", ",", "!", "!", "\n", "\n\n", "(", ")", "-", ":-)", ":-(", "-");
                 break;
-            case 3197:
-                if (str2.equals("da")) {
-                    c2 = '\n';
-                    break;
-                }
-                c2 = 65535;
+            case "da":
+                spokenPunctuationPhrases = Arrays.asList("punktum", "komma", "spørgsmålstegn", "udråbstegn", "tankestreg", "kolon", "ny linie", "nyt afsnit", "venstre parantes", "højre parantes");
+                spokenPunctuationSymbols = Arrays.asList(".", ",", "?", "!", "-", ":", "\n", "\n\n", "(", ")");
                 break;
-            case 3201:
-                if (str2.equals("de")) {
-                    c2 = 0;
-                    break;
-                }
-                c2 = 65535;
+            case "de":
+                spokenPunctuationPhrases = Arrays.asList("punkt", "komma", "fragezeichen", "doppelpunkt", "semikolon", "semikolon", "semikolon", "ausrufezeichen", "ausrufezeichen", "neue zeile", "neuer absatz", "klammer öffnen", "klammer schließen", "bindestrich", "smiley", "trauriges gesicht", "Bindestrich");
+                spokenPunctuationSymbols = Arrays.asList(".", ",", "?", ":", ";", ";", ";", "!", "!", "\n", "\n\n", "(", ")", "-", ":-)", ":-(", "-");
                 break;
-            case 3246:
-                if (str2.equals("es")) {
-                    c2 = 1;
-                    break;
-                }
-                c2 = 65535;
+            case "es":
+                spokenPunctuationPhrases = Arrays.asList("coma", "signo de interrogación", "dos puntos", "2 puntos", "punto y coma", "punto y,", "punto y ,", ". y coma", ". y,", ". y ,", "punto", "signo de exclamación", "exclamación", "nueva línea", "nuevo apartado", "abrir paréntesis", "cerrar paréntesis", "guión", "cara sonriente", "cara triste", "guión");
+                spokenPunctuationSymbols = Arrays.asList(",", "?", ":", ":", ";", ";", ";", ";", ";", ";", ".", "!", "!", "\n", "\n\n", "(", ")", "-", ":-)", ":-(", "-");
                 break;
-            case 3276:
-                if (str2.equals("fr")) {
-                    c2 = 2;
-                    break;
-                }
-                c2 = 65535;
+            case "fr":
+                spokenPunctuationPhrases = Arrays.asList("virgule", "point d'interrogation", "deux-points", "deux points", "2 points", "point-virgule", "point virgule", "point ,", "point,", "point d'exclamation", "point", "nouvelle ligne", "nouveau paragraphe", "ouvrir la parenthèse", "fermer la parenthèse", "tiret", "smiley", "visage triste", "tiret");
+                spokenPunctuationSymbols = Arrays.asList(",", "?", ":", ":", ":", ";", ";", ";", ";", "!", ".", "\n", "\n\n", "(", ")", "-", ":-)", ":-(", "-");
                 break;
-            case 3371:
-                if (str2.equals("it")) {
-                    c2 = 3;
-                    break;
-                }
-                c2 = 65535;
+            case "it":
+                spokenPunctuationPhrases = Arrays.asList("virgula", "punto interrogativo", "due punti", "2 punti", "punto e virgola", "punto e,", "punto e ,", "esclamativo", "punto esclamativo", "punto", "nuova riga", "nuovo paragrafo", "apri parentesi", "chiudi parentesi", "trattino", "smiley", "faccina sorridente", "faccina triste", "trattino");
+                spokenPunctuationSymbols = Arrays.asList(",", "?", ":", ":", ";", ";", ";", "!", "!", ".", "\n", "\n\n", "(", ")", "-", ":-)", ":-)", ":-(", "-");
                 break;
-            case 3383:
-                if (str2.equals("ja")) {
-                    c2 = 5;
-                    break;
-                }
-                c2 = 65535;
+            case "ja":
+                spokenPunctuationPhrases = Arrays.asList("ピリオド", "コンマ", "疑問符", "コロン", "セミコロン", "感嘆符", "感嘆符記号", "改行", "新しい段落", "括弧開き", "括弧閉じ", "ダッシュ", "スマイリー", "悲しい顔", "ダッシュ");
+                spokenPunctuationSymbols = Arrays.asList(".", ",", "?", ":", ";", "!", "!", "\n", "\n\n", "(", ")", "-", ":-)", ":-(", "-");
                 break;
-            case 3518:
-                if (str2.equals("nl")) {
-                    c2 = '\t';
-                    break;
-                }
-                c2 = 65535;
+            case "nl":
+                spokenPunctuationPhrases = Arrays.asList("punt", "komma", "vraagteken", "uitroepteken");
+                spokenPunctuationSymbols = Arrays.asList(".", ",", "?", "!");
                 break;
-            case 3588:
-                if (str2.equals("pt")) {
-                    c2 = '\b';
-                    break;
-                }
-                c2 = 65535;
+            case "pt":
+                spokenPunctuationPhrases = Arrays.asList("interrogação", "dois pontos", "2 pontos", "ponto e vírgula", "ponto e,", "ponto e ,", "ponto", "vírgula", "exclamação", "nova linha", "parágrafo", "abre parêntese", "fecha parêntese", "hífen", "smiley", "rosto triste", "hífen");
+                spokenPunctuationSymbols = Arrays.asList("?", ":", ":", ";", ";", ";", ".", ",", "!", "\n", "\n\n", "(", ")", "-", ":-)", ":-(", "-");
                 break;
-            case 3651:
-                if (str2.equals("ru")) {
-                    c2 = 4;
-                    break;
-                }
-                c2 = 65535;
+            case "ru":
+                spokenPunctuationPhrases = Arrays.asList("запятая", "вопросительный знак", "двоеточие", "точка с запятой", "точка с,", "точка с ,", "точка", "восклицательный символ", "восклицательный знак", "новая строка", "новый параграф", "открывающаяся скобка", "закрывающаяся скобка", "тире", "смайлик", "улыбочка", "грустное лицо", "тире");
+                spokenPunctuationSymbols = Arrays.asList(",", "?", ":", ";", ";", ";", ".", "!", "!", "\n", "\n\n", "(", ")", "-", ":-)", ":-)", ":-(", "-");
                 break;
-            case 98628:
-                if (str2.equals("cmn")) {
-                    c2 = 6;
-                    break;
-                }
-                c2 = 65535;
+            case "cmn":
+                spokenPunctuationPhrases = Arrays.asList("句号", "逗号", "问号", "冒号", "分号", "感叹号", "换行", "新段落", "左圆括号", "右圆括号", "破折号", "笑脸", "悲伤的脸", "破折号");
+                spokenPunctuationSymbols = Arrays.asList(".", ",", "?", ":", ";", "!", "\n", "\n\n", "(", ")", "——", ":-)", ":-(", "——");
                 break;
             default:
-                c2 = 65535;
-                break;
-        }
-        switch (c2) {
-            case 0:
-                Arrays.asList("punkt", "komma", "fragezeichen", "doppelpunkt", "semikolon", "semikolon", "semikolon", "ausrufezeichen", "ausrufezeichen", "neue zeile", "neuer absatz", "klammer öffnen", "klammer schließen", "bindestrich", "smiley", "trauriges gesicht", "Bindestrich");
-                Arrays.asList(".", ",", "?", ":", ";", ";", ";", "!", "!", "\n", "\n\n", "(", ")", "-", ":-)", ":-(", "-");
-                break;
-            case 1:
-                Arrays.asList("coma", "signo de interrogación", "dos puntos", "2 puntos", "punto y coma", "punto y,", "punto y ,", ". y coma", ". y,", ". y ,", "punto", "signo de exclamación", "exclamación", "nueva línea", "nuevo apartado", "abrir paréntesis", "cerrar paréntesis", "guión", "cara sonriente", "cara triste", "guión");
-                Arrays.asList(",", "?", ":", ":", ";", ";", ";", ";", ";", ";", ".", "!", "!", "\n", "\n\n", "(", ")", "-", ":-)", ":-(", "-");
-                break;
-            case 2:
-                Arrays.asList("virgule", "point d'interrogation", "deux-points", "deux points", "2 points", "point-virgule", "point virgule", "point ,", "point,", "point d'exclamation", "point", "nouvelle ligne", "nouveau paragraphe", "ouvrir la parenthèse", "fermer la parenthèse", "tiret", "smiley", "visage triste", "tiret");
-                Arrays.asList(",", "?", ":", ":", ":", ";", ";", ";", ";", "!", ".", "\n", "\n\n", "(", ")", "-", ":-)", ":-(", "-");
-                break;
-            case 3:
-                Arrays.asList("virgula", "punto interrogativo", "due punti", "2 punti", "punto e virgola", "punto e,", "punto e ,", "esclamativo", "punto esclamativo", "punto", "nuova riga", "nuovo paragrafo", "apri parentesi", "chiudi parentesi", "trattino", "smiley", "faccina sorridente", "faccina triste", "trattino");
-                Arrays.asList(",", "?", ":", ":", ";", ";", ";", "!", "!", ".", "\n", "\n\n", "(", ")", "-", ":-)", ":-)", ":-(", "-");
-                break;
-            case 4:
-                Arrays.asList("запятая", "вопросительный знак", "двоеточие", "точка с запятой", "точка с,", "точка с ,", "точка", "восклицательный символ", "восклицательный знак", "новая строка", "новый параграф", "открывающаяся скобка", "закрывающаяся скобка", "тире", "смайлик", "улыбочка", "грустное лицо", "тире");
-                Arrays.asList(",", "?", ":", ";", ";", ";", ".", "!", "!", "\n", "\n\n", "(", ")", "-", ":-)", ":-)", ":-(", "-");
-                break;
-            case 5:
-                Arrays.asList("ピリオド", "コンマ", "疑問符", "コロン", "セミコロン", "感嘆符", "感嘆符記号", "改行", "新しい段落", "括弧開き", "括弧閉じ", "ダッシュ", "スマイリー", "悲しい顔", "ダッシュ");
-                Arrays.asList(".", ",", "?", ":", ";", "!", "!", "\n", "\n\n", "(", ")", "-", ":-)", ":-(", "-");
-                break;
-            case 6:
-                Arrays.asList("句号", "逗号", "问号", "冒号", "分号", "感叹号", "换行", "新段落", "左圆括号", "右圆括号", "破折号", "笑脸", "悲伤的脸", "破折号");
-                Arrays.asList(".", ",", "?", ":", ";", "!", "\n", "\n\n", "(", ")", "——", ":-)", ":-(", "——");
-                break;
-            case 7:
-                Arrays.asList("فترة", "فاصلة مفاصلة", "علامة استفهام", "نقطتان", "نقوطة", "طة التعجب", "علامة تعجب،", "خط جديد", "فقرة جديدة", "افتح القوسان", "أغلق القوسان", "الشرطة", "مبتسم", "وجه حزين", "الشرطة");
-                Arrays.asList(".", ";", "?", ":", ",", "!", "!", "\n", "\n\n", "(", ")", "-", ":-)", ":-(", "-");
-                break;
-            case '\b':
-                Arrays.asList("interrogação", "dois pontos", "2 pontos", "ponto e vírgula", "ponto e,", "ponto e ,", "ponto", "vírgula", "exclamação", "nova linha", "parágrafo", "abre parêntese", "fecha parêntese", "hífen", "smiley", "rosto triste", "hífen");
-                Arrays.asList("?", ":", ":", ";", ";", ";", ".", ",", "!", "\n", "\n\n", "(", ")", "-", ":-)", ":-(", "-");
-                break;
-            case '\t':
-                Arrays.asList("punt", "komma", "vraagteken", "uitroepteken");
-                Arrays.asList(".", ",", "?", "!");
-                break;
-            case '\n':
-                Arrays.asList("punktum", "komma", "spørgsmålstegn", "udråbstegn", "tankestreg", "kolon", "ny linie", "nyt afsnit", "venstre parantes", "højre parantes");
-                Arrays.asList(".", ",", "?", "!", "-", ":", "\n", "\n\n", "(", ")");
-                break;
-            default:
-                Arrays.asList("period", "comma", "question mark", "colon", "semicolon", "semi colon", "semi:", "semi :", "exclamation mark", "exclamation point", "new line", "new paragraph", "open parenthesis", "open parentheses", "close parenthesis", "close parentheses", "hyphen", "smiley", "smiley face", "sad face", "dash", "open quotation", "close quotation", "quotation");
-                Arrays.asList(".", ",", "?", ":", ";", ";", ";", ";", "!", "!", "\n", "\n\n", "(", "(", ")", ")", "-", ":-)", ":-)", ":-(", "-", "“", "”", "\"");
+                spokenPunctuationPhrases = Arrays.asList("period", "comma", "question mark", "colon", "semicolon", "semi colon", "semi:", "semi :", "exclamation mark", "exclamation point", "new line", "new paragraph", "open parenthesis", "open parentheses", "close parenthesis", "close parentheses", "hyphen", "smiley", "smiley face", "sad face", "dash", "open quotation", "close quotation", "quotation");
+                spokenPunctuationSymbols = Arrays.asList(".", ",", "?", ":", ";", ";", ";", ";", "!", "!", "\n", "\n\n", "(", "(", ")", ")", "-", ":-)", ":-)", ":-(", "-", "\u201C", "\u201D", "\"");
                 break;
         }
     }
@@ -164,5 +96,35 @@ public class TextTrim {
             }
         }
         return str;
+    }
+
+    /** Convert a spoken punctuation phrase at the end of the text into the real
+     *  punctuation symbol, per the language table. Text without a trailing
+     *  spoken-punctuation phrase is returned unchanged (trimmed), exactly like
+     *  plain trim. (was n.b.a — the accuracy layer the newer note app added) */
+    public String formatSpoken(String str) {
+        String punctuation = "";
+        int phraseLength = 0;
+        String trimmed = trimEnd(str);
+        int length = trimmed.length();
+        String lower = trimmed.toLowerCase();
+        for (int i = 0; i < spokenPunctuationPhrases.size(); i++) {
+            String phrase = spokenPunctuationPhrases.get(i);
+            int diff = length - phrase.length();
+            String suffix;
+            if (diff > 0) {
+                suffix = " " + phrase;
+            } else if (diff < 0) {
+                continue;
+            } else {
+                suffix = phrase;
+            }
+            if (lower.endsWith(suffix)) {
+                punctuation = spokenPunctuationSymbols.get(i);
+                phraseLength = suffix.length();
+                break;
+            }
+        }
+        return trimEnd(trimmed.substring(0, trimmed.length() - phraseLength)) + punctuation;
     }
 }

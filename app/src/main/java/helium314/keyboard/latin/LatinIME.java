@@ -1189,7 +1189,14 @@ public class LatinIME extends InputMethodService implements
         // view is not displayed we have no means of showing suggestions anyway, and if it is then
         // we want to show suggestions anyway.
         final SettingsValues settingsValues = mSettings.getCurrent();
-        if (isInputViewShown()
+        // While continuous Voice is listening, the dictation engine owns the
+        // editor's composing region. Skip HeliBoard's selection/suggestion
+        // machinery so it cannot finish or re-claim that region between partial
+        // results (which would bake the grey text as permanent and break the
+        // engine's replace-in-place correction). Typing itself still works: it
+        // flows through the normal input pipeline untouched.
+        final boolean voiceEngineListening = mVoiceEngine != null && mVoiceEngine.isListening();
+        if (isInputViewShown() && !voiceEngineListening
                 && mInputLogic.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd,
                 composingSpanStart, composingSpanEnd, settingsValues)) {
             // we don't want to update a manually set shift state if selection changed towards one side
@@ -1567,21 +1574,9 @@ public class LatinIME extends InputMethodService implements
                 mVoiceEngine.startOrPause();
             return;
         }
-        // While listening, typed characters and backspace are routed through the
-        // engine so dictation keeps running while the keyboard is touched/used.
-        if (mVoiceEngine != null && mVoiceEngine.isListening()) {
-            if (KeyCode.DELETE == event.getKeyCode()) {
-                mVoiceEngine.deleteChar();
-                return;
-            }
-            if (!event.isFunctionalKeyEvent()) {
-                final CharSequence text = event.getTextToCommit();
-                if (text != null && text.length() > 0) {
-                    mVoiceEngine.typeText(text.toString());
-                    return;
-                }
-            }
-        }
+        // Typing and editing while the mic is on go through the normal input
+        // pipeline untouched — the engine is a passive dictation writer and
+        // never sees typed text (same as the reference app).
         // Normal keyboard interaction MUST NOT stop continuous Voice.
         // The reference continuous-dictation behavior keeps the microphone/
         // recognition session active while the user touches/uses the keyboard.

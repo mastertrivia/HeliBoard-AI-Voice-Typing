@@ -221,7 +221,7 @@ public class VoiceController implements RecognitionListener {
             str = normalizePunctuation(str);
         }
         if (this.pendingTypedChar.equals("")) {
-            str2 = TextTrim.trimEnd(str);
+            str2 = this.textTrim.formatSpoken(str);
         } else {
             str2 = TextTrim.trimEnd(str) + this.pendingTypedChar;
             this.pendingTypedChar = "";
