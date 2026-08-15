@@ -337,12 +337,25 @@ private constructor(val themeId: Int, @JvmField val mStyleId: Int) {
                     keyboardBackground = backgroundImage
                 )
                 else -> { // user-defined theme
-                    val colorSettings = readUserColors(prefs, themeName)
-                    val colors = readUserColorTheme(themeStyle, hasBorders, colorSettings, context, isNight, backgroundImage)
-                    if (readUserMoreColors(prefs, themeName) == 2)
-                        AllColors(readUserAllColors(prefs, themeName, colors), themeStyle, hasBorders, backgroundImage)
-                    else {
-                        colors
+                    if (!prefs.contains(Settings.PREF_USER_COLORS_PREFIX + themeName)
+                        && !prefs.contains(Settings.PREF_USER_ALL_COLORS_PREFIX + themeName)
+                        && !prefs.contains(Settings.PREF_USER_MORE_COLORS_PREFIX + themeName)) {
+                        // The stored theme name is stale (e.g. left over from a theme pack that was
+                        // removed from the app). Every real user theme has at least one of the
+                        // PREF_USER_* keys, so this name has no data behind it: fall back to the
+                        // default theme instead of rendering an empty grey theme.
+                        getThemeColors(
+                            if (isNight) Defaults.PREF_THEME_COLORS_NIGHT else Defaults.PREF_THEME_COLORS,
+                            themeStyle, context, prefs, isNight
+                        )
+                    } else {
+                        val colorSettings = readUserColors(prefs, themeName)
+                        val colors = readUserColorTheme(themeStyle, hasBorders, colorSettings, context, isNight, backgroundImage)
+                        if (readUserMoreColors(prefs, themeName) == 2)
+                            AllColors(readUserAllColors(prefs, themeName, colors), themeStyle, hasBorders, backgroundImage)
+                        else {
+                            colors
+                        }
                     }
                 }
             }

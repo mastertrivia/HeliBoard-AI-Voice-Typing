@@ -72,6 +72,9 @@ import helium314.keyboard.latin.settings.SettingsValues;
 import helium314.keyboard.latin.suggestions.SuggestionStripView;
 import helium314.keyboard.latin.suggestions.SuggestionStripViewAccessor;
 import helium314.keyboard.voice.SpeechNotesVoiceEngine;
+import helium314.keyboard.voice.VoiceSounds;
+import helium314.keyboard.latin.translation.DeshTranslationEngine;
+import helium314.keyboard.latin.translation.DeshTranslationHost;
 import helium314.keyboard.latin.translation.DeshTranslationView;
 import helium314.keyboard.latin.touchinputconsumer.GestureConsumer;
 import helium314.keyboard.latin.utils.ColorUtilKt;
@@ -143,6 +146,7 @@ public class LatinIME extends InputMethodService implements
 
     // TODO: Move these {@link View}s to {@link KeyboardSwitcher}.
     private View mInputView;
+    private DeshTranslationEngine mDeshTranslationEngine;
     private DeshTranslationView mDeshTranslationView;
     private InsetsOutlineProvider mInsetsUpdater;
     private SuggestionStripView mSuggestionStripView;
@@ -150,6 +154,12 @@ public class LatinIME extends InputMethodService implements
     private AiVoiceSessionController mAiVoiceSessionController;
     @Nullable
     private SpeechNotesVoiceEngine mVoiceEngine;
+
+    /** Previous voice listening state, so the start/stop sounds fire once per actual transition. */
+    private boolean mVoiceListeningSoundState;
+
+    /** Isolated Desh Hindi composer — owns key->composition->commit for desh_hindi only. */
+    private DeshHindiComposer mDeshHindiComposer;
 
     private RichInputMethodManager mRichImm;
     /**
@@ -576,6 +586,33 @@ public class LatinIME extends InputMethodService implements
         // the system shortcut-IME handoff.
         mVoiceEngine = new SpeechNotesVoiceEngine(this);
 
+        // Isolated Desh Hindi input layer. Any unexpected state falls back to plain
+        // HeliBoard insertion inside the composer, so it can never corrupt the text.
+        mDeshHindiComposer = new DeshHindiComposer(new DeshHindiComposer.Host() {
+            @Override public String getTextBeforeCursor(int maxLength) {
+                final InputConnection ic = getCurrentInputConnection();
+                if (ic == null) return null;
+                final CharSequence cs = ic.getTextBeforeCursor(maxLength, 0);
+                return cs == null ? null : cs.toString();
+            }
+            @Override public void setComposingText(String text) {
+                final InputConnection ic = getCurrentInputConnection();
+                if (ic != null) ic.setComposingText(text, 1);
+            }
+            @Override public void commitText(String text) {
+                final InputConnection ic = getCurrentInputConnection();
+                if (ic != null) ic.commitText(text, 1);
+            }
+            @Override public void deleteSurroundingText(int before) {
+                final InputConnection ic = getCurrentInputConnection();
+                if (ic != null) ic.deleteSurroundingText(before, 0);
+            }
+            @Override public void finishComposingText() {
+                final InputConnection ic = getCurrentInputConnection();
+                if (ic != null) ic.finishComposingText();
+            }
+        });
+
         loadSettings();
         mClipboardHistoryManager.onCreate();
         mHandler.onCreate();
@@ -730,7 +767,8 @@ public class LatinIME extends InputMethodService implements
         }
         mClipboardHistoryManager.onDestroy();
         mDictionaryFacilitator.closeDictionaries();
-        if (mDeshTranslationView != null) mDeshTranslationView.hidePanel(false);
+        if (mDeshTranslationEngine != null) mDeshTranslationEngine.destroy();
+        mDeshTranslationEngine = null;
         mDeshTranslationView = null;
         mSettings.onDestroy();
         if (foldableObserver != null)
@@ -802,14 +840,21 @@ public class LatinIME extends InputMethodService implements
         updateSuggestionStripView(view);
         mDeshTranslationView = view.findViewById(R.id.desh_translation_view);
         if (mDeshTranslationView != null) {
-            mDeshTranslationView.setHost(new DeshTranslationView.Host() {
-                @Override public InputConnection getTargetInputConnection() { return getCurrentInputConnection(); }
-                @Override public String currentLanguage() { return mRichImm.getCurrentSubtypeLocale().getLanguage(); }
-                @Override public void finishTranslationComposition() {
-                    final InputConnection ic = getCurrentInputConnection();
-                    if (ic != null) ic.finishComposingText();
+            mDeshTranslationEngine = new DeshTranslationEngine(this, new DeshTranslationHost() {
+                @Override public InputConnection getInputConnection() { return getCurrentInputConnection(); }
+                @Override public android.os.IBinder inputViewWindowToken() {
+                    return (getWindow() != null && getWindow().getDecorView() != null)
+                            ? getWindow().getDecorView().getWindowToken() : null;
+                }
+                @Override public String currentLanguageCode() {
+                    return mRichImm.getCurrentSubtypeLocale().getLanguage();
+                }
+                @Override public void onTranslationVisibilityChanged(boolean visible) {
+                    if (mInputView != null) mInputView.post(mInputView::requestLayout);
                 }
             });
+            mDeshTranslationView.setEngine(mDeshTranslationEngine);
+            mDeshTranslationEngine.view = mDeshTranslationView;
         }
     }
 
@@ -831,6 +876,15 @@ public class LatinIME extends InputMethodService implements
     public void onVoiceEngineListeningStateChanged(boolean listening) {
         if (mSuggestionStripView != null)
             mSuggestionStripView.setVoiceListening(listening);
+        // Play the start/stop indicator tones only on the real listening-state
+        // transitions (not on the mic tap, and not on internal recognition restarts,
+        // which keep the state true). The engine state is the source of truth.
+        if (listening && !mVoiceListeningSoundState) {
+            VoiceSounds.playListeningStart();
+        } else if (!listening && mVoiceListeningSoundState) {
+            VoiceSounds.playListeningStop();
+        }
+        mVoiceListeningSoundState = listening;
     }
 
     @Override
@@ -847,6 +901,9 @@ public class LatinIME extends InputMethodService implements
     public void onStartInputView(final EditorInfo editorInfo, final boolean restarting) {
         mHandler.onStartInputView(editorInfo, restarting);
         mStatsUtilsManager.onStartInputView();
+        if (mDeshHindiComposer != null)
+            mDeshHindiComposer.reset();
+        mDeshHindiVowelDiacriticMode = false;
     }
 
     @Override
@@ -858,7 +915,7 @@ public class LatinIME extends InputMethodService implements
             mVoiceEngine.stopIfListening();
         StatsUtils.onFinishInputView();
         mHandler.onFinishInputView(finishingInput);
-        if (mDeshTranslationView != null && mDeshTranslationView.isOpen()) mDeshTranslationView.hidePanel(true);
+        if (mDeshTranslationEngine != null && mDeshTranslationEngine.isOpen()) mDeshTranslationEngine.hide(false);
         mStatsUtilsManager.onFinishInputView();
         mGestureConsumer = GestureConsumer.NULL_GESTURE_CONSUMER;
         BackgroundGatheringCache.saveOrClear(this);
@@ -866,7 +923,7 @@ public class LatinIME extends InputMethodService implements
 
     @Override
     public void onFinishInput() {
-        if (mDeshTranslationView != null && mDeshTranslationView.isOpen()) mDeshTranslationView.hidePanel(true);
+        if (mDeshTranslationEngine != null && mDeshTranslationEngine.isOpen()) mDeshTranslationEngine.hide(false);
         if (mVoiceEngine != null)
             mVoiceEngine.stopIfListening();
         mHandler.onFinishInput();
@@ -1572,6 +1629,18 @@ public class LatinIME extends InputMethodService implements
                 mVoiceEngine.startOrPause();
             return;
         }
+        // Isolated Desh Hindi input layer: desh_hindi owns key->composition->commit
+        // here; the composer falls back to plain insertion whenever anything is off.
+        // Disabled while continuous Voice is listening so the voice engine's own
+        // typed-character routing is never bypassed.
+        if (mDeshHindiComposer != null && isDeshHindiSubtype()
+                && (mVoiceEngine == null || !mVoiceEngine.isListening())
+                && mDeshHindiComposer.onKey(event.getKeyCode())) {
+            // The composer changed the text itself, so refresh the vowel-diacritic
+            // layout state (consonant -> vowel keys become matras).
+            updateDeshHindiVowelDiacriticMode(true);
+            return;
+        }
         // Typing and editing while the mic is on go through the normal input
         // pipeline untouched — the engine is a passive dictation writer and
         // never sees typed text (same as the reference app).
@@ -1598,14 +1667,15 @@ public class LatinIME extends InputMethodService implements
             mHandler.post(mKeyboardSwitcher::reloadMainKeyboard);
     }
 
+    /** Desh toolbar TRANSLATE key: open/close the ported Desh translation block. */
     private void toggleDeshTranslation() {
-        if (mDeshTranslationView == null) return;
-        if (mDeshTranslationView.isOpen()) {
-            mDeshTranslationView.hidePanel(true);
+        if (mDeshTranslationEngine == null) return;
+        if (mDeshTranslationEngine.isOpen()) {
+            mDeshTranslationEngine.hide(true);
         } else {
             final InputConnection ic = getCurrentInputConnection();
             if (ic != null) ic.finishComposingText();
-            mDeshTranslationView.showPanel();
+            mDeshTranslationEngine.show();
         }
     }
 
@@ -1613,6 +1683,13 @@ public class LatinIME extends InputMethodService implements
         if (rawText == null) return;
         if (mAiVoiceSessionController != null)
             mAiVoiceSessionController.onInputInteraction();
+        // Isolated Desh Hindi input layer — multi-codepoint keys (क्ष, क़, …).
+        if (mDeshHindiComposer != null && isDeshHindiSubtype()
+                && (mVoiceEngine == null || !mVoiceEngine.isListening())
+                && mDeshHindiComposer.onText(rawText)) {
+            updateDeshHindiVowelDiacriticMode(true);
+            return;
+        }
         // TODO: have the keyboard pass the correct key code when we need it.
         Event event = Event.createSoftwareTextEvent(rawText, KeyCode.MULTIPLE_CODE_POINTS, null);
         InputTransaction completeInputTransaction = mInputLogic.onTextInput(mSettings.getCurrent(),

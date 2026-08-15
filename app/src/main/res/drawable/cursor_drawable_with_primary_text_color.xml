@@ -1,5 +1,7 @@
-<shape
-  xmlns:android="http://schemas.android.com/apk/res/android">
-    <size android:width="2.0dip" />
-    <solid android:color="#FF000000" />
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Text cursor (Desh cursor_drawable_with_primary_text_color). White base, tinted
+     at runtime with the HeliBoard KEY_TEXT color. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <size android:width="2dp" />
+    <solid android:color="#FFFFFF" />
 </shape>

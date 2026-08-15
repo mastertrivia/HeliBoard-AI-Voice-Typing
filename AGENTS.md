@@ -51,10 +51,15 @@ re-applied before pushing. These regressed CI in ZIP 3:
   `emptyList()` for the null-prefs case. The screen also declares
   `words` as `mutableStateOf(DeshNativeWordStore.all())`, which works once
   `all()` returns the list.
-- `app/src/main/java/helium314/keyboard/latin/translation/DeshTranslationView.kt`
+- `app/src/main/java/helium314/keyboard/latin/translation/DeshTranslationEngine.kt`
+  (since ZIP 6 the translation network layer lives here, not in DeshTranslationView)
   must NOT contain `import kotlinx.serialization.json.getOrNull` (does not
   exist in kotlinx-serialization-json 1.11.0; `getOrNull` on `JsonArray`
   resolves via `kotlin.collections` auto-import). If present, remove that line.
+- ZIP 6 refactored the translation subsystem: `DeshTranslationView.kt` no longer
+  uses coroutines/okhttp, so the old `isActive`-import regression (section 1)
+  does NOT apply anymore — check `DeshTranslationEngine.kt` instead for the
+  getOrNull import and any coroutine usage.
 
 ## Workflow
 

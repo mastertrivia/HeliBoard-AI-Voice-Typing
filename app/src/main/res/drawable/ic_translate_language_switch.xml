@@ -1,3 +1,15 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
-    <path android:fillColor="@color/foreground" android:pathData="M8,5H20V7H8V9L4,6L8,3V5M16,19H4V17H16V15L20,18L16,21V19Z"/>
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Desh Keyboard ic_translate_language_switch (swap button). White fill, tinted at
+     runtime with the HeliBoard theme color. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="35dp"
+    android:height="34dp"
+    android:viewportWidth="35.0"
+    android:viewportHeight="34.0">
+    <group>
+        <clip-path android:pathData="M5.5,5h24v24h-24z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M12.5,25L7.5,20L12.5,15L13.9,16.425L11.325,19H18.5V21H11.325L13.9,23.575L12.5,25ZM22.5,19L21.1,17.575L23.675,15H16.5V13H23.675L21.1,10.425L22.5,9L27.5,14L22.5,19Z" />
+    </group>
 </vector>

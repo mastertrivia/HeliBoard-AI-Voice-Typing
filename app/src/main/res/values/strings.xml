@@ -826,21 +826,20 @@ New dictionary:
     <!-- Button to close a dialog where neither "ok" nor "cancel" are suitable. Preferably 10 characters or less. -->
     <string name="dialog_close">Close</string>
     <string name="translate">Translate</string>
+    <!-- Desh translation block (Desh Keyboard v17.4.9 strings) -->
+    <string name="translate_from">Translate from</string>
+    <string name="translate_to">Translate to</string>
+    <string name="translate_hint_english">Type/Speak here to translate</string>
+    <string name="translate_hint_native">अंग्रेजी में बदलने के लिए यहां लिखें/बोलें</string>
+    <string name="translate_language_switch_button_description">Currently translating from %1$s to %2$s, Click to switch from %2$s to %1$s</string>
     <string name="translate_switch_languages">Switch translation languages</string>
     <string name="translate_close">Close translation</string>
-    <string name="translate_language_hindi">Hindi</string>
-    <string name="translate_language_english">English</string>
-    <string name="translate_hint_to_english">अंग्रेजी में बदलने के लिए यहां लिखें</string>
-    <string name="translate_hint_to_hindi">हिन्दी में बदलने के लिए यहां लिखें</string>
-    <string name="translate_hint_generic">Type text to translate</string>
-    <string name="translate_speak">Speak</string>
-    <string name="translate_stop_speaking">Stop</string>
-    <string name="translate_search_language">Search language</string>
-    <string name="translate_select_source">Select source language</string>
-    <string name="translate_select_target">Select target language</string>
-    <string name="translate_error_unknown">Unknown error</string>
     <string name="translate_retry">Retry</string>
     <string name="translate_try_shorter_text">Try with shorter text</string>
+    <string name="translate_failed">Translation failed</string>
+    <string name="network_unavailable">Network unavailable</string>
+    <string name="retrying">Retrying</string>
+    <string name="recent_languages_header">Recent</string>
     <string name="desh_native_words_title">Desh Hindi user words</string>
     <string name="desh_native_words_add">Add word</string>
     <string name="desh_native_words_edit_title">Desh Hindi user word</string>

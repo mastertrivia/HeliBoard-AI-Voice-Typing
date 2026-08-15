@@ -708,6 +708,26 @@ private object AppUpgrade {
                 prefs.edit { remove("emoji_recent_keys")  }
             }
         }
+        if (oldVersion <= 4006) {
+            // Heal stale theme preferences left over from theme packs that were removed from the
+            // app (e.g. the Desboard themes). A stored theme name that is neither a default color
+            // theme nor a real user theme has no data behind it and would render as the default
+            // grey keyboard; reset it to the proper default so theme selection works again.
+            fun isRealUserTheme(name: String) =
+                prefs.contains(Settings.PREF_USER_COLORS_PREFIX + name)
+                    || prefs.contains(Settings.PREF_USER_ALL_COLORS_PREFIX + name)
+                    || prefs.contains(Settings.PREF_USER_MORE_COLORS_PREFIX + name)
+            listOf(
+                Settings.PREF_THEME_COLORS to Defaults.PREF_THEME_COLORS,
+                Settings.PREF_THEME_COLORS_NIGHT to Defaults.PREF_THEME_COLORS_NIGHT
+            ).forEach { (key, default) ->
+                val name = prefs.getString(key, default)
+                if (name != null && name !in KeyboardTheme.getAvailableDefaultColors(prefs, key == Settings.PREF_THEME_COLORS_NIGHT)
+                    && !isRealUserTheme(name)) {
+                    prefs.edit { putString(key, default) }
+                }
+            }
+        }
         upgradeToolbarPrefs(prefs)
         LayoutUtilsCustom.onLayoutFileChanged() // just to be sure
         prefs.edit { putInt(Settings.PREF_VERSION_CODE, BuildConfig.VERSION_CODE) }
