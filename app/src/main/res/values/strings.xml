@@ -548,6 +548,7 @@ language, hence "No language". -->
     <string name="layout_functional_keys_symbols_shifted" tools:keep="@string/layout_functional_keys_symbols_shifted">Functional keys (More symbols)</string>
     <!-- Name for symbols layout -->
     <string name="layout_symbols" tools:keep="@string/layout_symbols">Symbols</string>
+    <string name="layout_symbols_new" tools:keep="@string/layout_symbols_new">Symbols (New)</string>
     <!-- Name for symbols layout for arabic language -->
     <string name="layout_symbols_arabic" tools:keep="@string/layout_symbols_arabic">Symbols (Arabic)</string>
     <!-- Name for more symbols layout (when pressing shift) -->

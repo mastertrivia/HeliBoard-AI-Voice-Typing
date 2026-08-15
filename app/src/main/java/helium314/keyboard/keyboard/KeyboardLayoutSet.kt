@@ -117,6 +117,7 @@ class KeyboardLayoutSet internal constructor(private val mContext: Context, priv
         var numberRowEnabled = false
         var numberRowInSymbols = false
         var deshHindiVowelDiacriticMode = false
+        var deshHindiVowelPrefix: String = ""
         var languageSwitchKeyEnabled = false
         var emojiKeyEnabled = false
         var oneHandedModeEnabled = false
@@ -177,6 +178,11 @@ class KeyboardLayoutSet internal constructor(private val mContext: Context, priv
         
         fun setDeshHindiVowelDiacriticMode(enabled: Boolean): Builder {
             params.deshHindiVowelDiacriticMode = enabled
+            return this
+        }
+
+        fun setDeshHindiVowelPrefix(prefix: String?): Builder {
+            params.deshHindiVowelPrefix = prefix ?: ""
             return this
         }
 

@@ -168,6 +168,7 @@ public class LatinIME extends InputMethodService implements
      * SettingsValues because it follows the text immediately before the cursor.
      */
     private boolean mDeshHindiVowelDiacriticMode = false;
+    private String mDeshHindiVowelPrefix = "";
 
     final KeyboardSwitcher mKeyboardSwitcher;
     private final SubtypeState mSubtypeState = new SubtypeState((InputMethodSubtype subtype) -> { switchToSubtype(subtype); return Unit.INSTANCE; });
@@ -935,6 +936,10 @@ public class LatinIME extends InputMethodService implements
         return mDeshHindiVowelDiacriticMode;
     }
 
+    public String getDeshHindiVowelPrefix() {
+        return mDeshHindiVowelPrefix;
+    }
+
     private boolean isDeshHindiSubtype() {
         return DeshInputEngine.INSTANCE.isDeshHindiSubtype(
                 mRichImm.getCurrentSubtype().getMainLayoutName());
@@ -953,19 +958,33 @@ public class LatinIME extends InputMethodService implements
         try {
             final CharSequence beforeCursor = mInputLogic.mConnection.getTextBeforeCursor(
                     DeshInputEngine.SYLLABLE_WINDOW, 0);
-            return DeshInputEngine.INSTANCE.computeVowelDiacriticMode(beforeCursor);
+            return !DeshInputEngine.findVowelDisplayPrefix(beforeCursor).isEmpty();
         } catch (Throwable t) {
             // Never let contextual key rendering break the IME if an editor rejects the query.
             return false;
         }
     }
 
+    private String computeDeshHindiVowelPrefix() {
+        if (!isDeshHindiSubtype())
+            return "";
+        try {
+            final CharSequence beforeCursor = mInputLogic.mConnection.getTextBeforeCursor(
+                    DeshInputEngine.SYLLABLE_WINDOW, 0);
+            return DeshInputEngine.findVowelDisplayPrefix(beforeCursor);
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
     private void updateDeshHindiVowelDiacriticMode(final boolean reloadIfChanged) {
         final boolean newMode = computeDeshHindiVowelDiacriticMode();
-        if (newMode == mDeshHindiVowelDiacriticMode)
-            return;
+        final String newPrefix = computeDeshHindiVowelPrefix();
+        final boolean changed = newMode != mDeshHindiVowelDiacriticMode
+                || !newPrefix.equals(mDeshHindiVowelPrefix);
         mDeshHindiVowelDiacriticMode = newMode;
-        if (reloadIfChanged && mKeyboardSwitcher.getMainKeyboardView() != null)
+        mDeshHindiVowelPrefix = newPrefix;
+        if (changed && reloadIfChanged && mKeyboardSwitcher.getMainKeyboardView() != null)
             mHandler.post(mKeyboardSwitcher::reloadMainKeyboard);
     }
 
@@ -1664,6 +1683,7 @@ public class LatinIME extends InputMethodService implements
         if (!mDeshHindiVowelDiacriticMode)
             return;
         mDeshHindiVowelDiacriticMode = false;
+        mDeshHindiVowelPrefix = "";
         if (mKeyboardSwitcher.getMainKeyboardView() != null)
             mHandler.post(mKeyboardSwitcher::reloadMainKeyboard);
     }

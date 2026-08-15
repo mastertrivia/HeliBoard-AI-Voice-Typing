@@ -77,8 +77,9 @@ class Suggest(private val mDictionaryFacilitator: DictionaryFacilitator) {
         val typedWordString = wordComposer.typedWord
         val resultsArePredictions = !wordComposer.isComposingWord
         val isDeshEnglishSubtype = DeshInputEngine.isDeshEnglishSubtype(keyboard.mId.subtype.mainLayoutName)
+        val isHindiLocale = keyboard.mId.subtype.locale.language == "hi"
         val deshResults = when {
-            keyboard.mId.subtype.mainLayoutName == "desh_hindi" -> {
+            isHindiLocale -> {
                 val words = DeshHindiPredictor.getSuggestions(
                     typedWordString, ngramContext, typedWordString.isEmpty()
                 )
@@ -89,7 +90,8 @@ class Suggest(private val mDictionaryFacilitator: DictionaryFacilitator) {
                 // word is merged at Integer.MAX_VALUE (Desh's usernativewords/a.a() result,
                 // kind USER_NATIVE_WORD, in NativeTypedWordSuggestionsTask), so it always
                 // outranks the native suggestions. No automatic learning — matching Desh.
-                if (results != null && typedWordString.isNotEmpty())
+                if (results != null && typedWordString.isNotEmpty()
+                    && DeshInputEngine.isDeshHindiSubtype(keyboard.mId.subtype.mainLayoutName))
                     DeshNativeWordStore.get(typedWordString)?.let {
                         results.add(
                             SuggestedWordInfo(

@@ -164,6 +164,7 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
                 .setNumberRowEnabled(settingsValues.mShowsNumberRow)
                 .setNumberRowInSymbolsEnabled(settingsValues.mShowsNumberRowInSymbols)
                 .setDeshHindiVowelDiacriticMode(mLatinIME.isDeshHindiVowelDiacriticMode())
+                .setDeshHindiVowelPrefix(mLatinIME.getDeshHindiVowelPrefix())
                 .setLanguageSwitchKeyEnabled(settingsValues.isLanguageSwitchKeyEnabled())
                 .setEmojiKeyEnabled(settingsValues.mShowsEmojiKey)
                 .setSplitLayoutEnabled(settingsValues.mIsSplitKeyboardEnabled)
@@ -181,6 +182,7 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
                         .setNumberRowEnabled(settingsValues.mShowsNumberRow)
                         .setNumberRowInSymbolsEnabled(settingsValues.mShowsNumberRowInSymbols)
                         .setDeshHindiVowelDiacriticMode(mLatinIME.isDeshHindiVowelDiacriticMode())
+                        .setDeshHindiVowelPrefix(mLatinIME.getDeshHindiVowelPrefix())
                         .setLanguageSwitchKeyEnabled(settingsValues.isLanguageSwitchKeyEnabled())
                         .setEmojiKeyEnabled(settingsValues.mShowsEmojiKey)
                         .build();

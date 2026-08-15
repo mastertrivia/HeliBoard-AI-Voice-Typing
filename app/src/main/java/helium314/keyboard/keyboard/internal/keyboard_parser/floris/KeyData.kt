@@ -148,7 +148,21 @@ class DeshHindiVowelSelector(
     val default: AbstractKeyData,
 ) : AbstractKeyData {
     override fun compute(params: KeyboardParams, isPopup: Boolean): KeyData? {
-        return (if (params.mId.deshHindiVowelDiacriticMode) active else default).compute(params)
+        val selected = (if (params.mId.deshHindiVowelDiacriticMode) active else default).compute(params, isPopup)
+            ?: return null
+        if (!params.mId.deshHindiVowelDiacriticMode || params.mId.deshHindiVowelPrefix.isEmpty() || isPopup) {
+            return selected
+        }
+        // Desh's native-letter vowel keys render the current consonant/syllable prefix
+        // together with the dependent-vowel form (e.g. क + ि => "कि"). The key code
+        // remains the matra/special code; only the visual label changes.
+        val renderedLabel = if (selected.code == helium314.keyboard.keyboard.internal.keyboard_parser.floris.KeyCode.DESH_NO_INPUT_VOWEL) {
+            params.mId.deshHindiVowelPrefix
+        } else {
+            params.mId.deshHindiVowelPrefix + selected.label
+        }
+        if (renderedLabel == selected.label) return selected
+        return selected.copy(newLabel = renderedLabel)
     }
 
     override fun asString(isForDisplay: Boolean): String = ""

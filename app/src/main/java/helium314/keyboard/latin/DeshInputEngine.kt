@@ -52,6 +52,13 @@ object DeshInputEngine {
         return DeshHindiLayoutData.findDeshHindiSyllable(textBeforeCursor) != null
     }
 
+    /** Returns the same longest valid Desh syllable suffix used by the reference keyboard. */
+    @JvmStatic
+    fun findVowelDisplayPrefix(textBeforeCursor: CharSequence?): String {
+        if (textBeforeCursor == null || textBeforeCursor.isEmpty()) return ""
+        return DeshHindiLayoutData.findDeshHindiSyllable(textBeforeCursor).orEmpty()
+    }
+
     /** True for the अ key that exits vowel mode without inserting text. */
     @JvmStatic
     fun isNoInputVowel(code: Int): Boolean = code == CODE_NO_INPUT_VOWEL
