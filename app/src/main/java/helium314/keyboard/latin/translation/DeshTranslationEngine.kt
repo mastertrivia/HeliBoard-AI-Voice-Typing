@@ -95,18 +95,18 @@ class DeshTranslationEngine(
         }
         val url = buildUrl(text, sourceLanguage.code, targetLanguage.code)
         if (url.length > MAX_URL_LENGTH) {
-            setState(DeshTranslationState.Error(context.getString(R.string.translate_try_shorter_text)))
+            updateState(DeshTranslationState.Error(context.getString(R.string.translate_try_shorter_text)))
             return
         }
         if (!isNetworkAvailable()) {
-            setState(DeshTranslationState.NoInternet)
+            updateState(DeshTranslationState.NoInternet)
             return
         }
         request = DeshTranslationRequest(
             url = url,
-            onSuccess = { body -> setState(parseResponse(body)) },
-            onError = { setState(DeshTranslationState.Error(context.getString(R.string.translate_failed))) },
-            onRetry = { count -> setState(DeshTranslationState.Loading(count)) }
+            onSuccess = { body -> updateState(parseResponse(body)) },
+            onError = { updateState(DeshTranslationState.Error(context.getString(R.string.translate_failed))) },
+            onRetry = { count -> updateState(DeshTranslationState.Loading(count)) }
         ).also { it.start() }
     }
 
@@ -133,7 +133,7 @@ class DeshTranslationEngine(
     // ------------------------------------------------------------------
     // State — a.i(f): store + render
     // ------------------------------------------------------------------
-    fun setState(newState: DeshTranslationState) {
+    fun updateState(newState: DeshTranslationState) {
         state = newState
         view?.setState(newState)
     }
@@ -184,7 +184,7 @@ class DeshTranslationEngine(
     fun show() {
         val v = view ?: return
         v.visibility = android.view.View.VISIBLE
-        setState(DeshTranslationState.Init)
+        updateState(DeshTranslationState.Init)
         v.initUi()
         val et = v.editText
         et.requestFocus()
@@ -197,7 +197,7 @@ class DeshTranslationEngine(
         val ic = host.getInputConnection()
         val beforeCursor = ic?.getTextBeforeCursor(200, 0)?.toString().orEmpty()
         addSpaceToTranslation = beforeCursor.any { it != ' ' && it != '\n' }
-        setState(DeshTranslationState.Idle)
+        updateState(DeshTranslationState.Idle)
         host.onTranslationVisibilityChanged(true)
     }
 
