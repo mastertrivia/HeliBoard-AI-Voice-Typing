@@ -878,8 +878,8 @@ public class LatinIME extends InputMethodService implements
     }
 
     private boolean isDeshHindiSubtype() {
-        return "hi".equals(mRichImm.getCurrentSubtype().getLocale().getLanguage())
-                && "desh_hindi".equals(mRichImm.getCurrentSubtype().getMainLayoutName());
+        return DeshInputEngine.INSTANCE.isDeshHindiSubtype(
+                mRichImm.getCurrentSubtype().getMainLayoutName());
     }
 
     /**
@@ -894,10 +894,8 @@ public class LatinIME extends InputMethodService implements
             return false;
         try {
             final CharSequence beforeCursor = mInputLogic.mConnection.getTextBeforeCursor(
-                    DeshHindiLayoutData.DESH_SYLLABLE_WINDOW, 0);
-            if (beforeCursor == null || beforeCursor.length() == 0)
-                return false;
-            return DeshHindiLayoutData.findDeshHindiSyllable(beforeCursor) != null;
+                    DeshInputEngine.SYLLABLE_WINDOW, 0);
+            return DeshInputEngine.INSTANCE.computeVowelDiacriticMode(beforeCursor);
         } catch (Throwable t) {
             // Never let contextual key rendering break the IME if an editor rejects the query.
             return false;
@@ -1540,7 +1538,7 @@ public class LatinIME extends InputMethodService implements
     // This method is public for testability of LatinIME, but also in the future it should
     // completely replace #onCodeInput.
     public void onEvent(@NonNull final Event event) {
-        if (KeyCode.DESH_NO_INPUT_VOWEL == event.getKeyCode()) {
+        if (DeshInputEngine.INSTANCE.isNoInputVowel(event.getKeyCode())) {
             // The अ key in Desh Hindi vowel mode: exits the vowel diacritic mode without
             // inserting any text (mirrors Desh's key_native_no_input_vowel handling in
             // bg/g.java, which forces the syllable state to empty).

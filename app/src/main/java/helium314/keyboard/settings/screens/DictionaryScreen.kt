@@ -49,9 +49,15 @@ import helium314.keyboard.latin.utils.previewDark
 import java.io.File
 import java.util.Locale
 
+private sealed interface DictEntry {
+    data object DeshWords : DictEntry
+    data class LocaleEntry(val locale: Locale?) : DictEntry
+}
+
 @Composable
 fun DictionaryScreen(
     onClickBack: () -> Unit,
+    onClickDeshNativeWords: () -> Unit,
 ) {
     val ctx = LocalContext.current
     val enabledLanguages = SubtypeSettings.getEnabledSubtypes(true).map { it.locale().language }
@@ -65,45 +71,67 @@ fun DictionaryScreen(
         onClickBack = onClickBack,
         title = { Text(stringResource(R.string.dictionary_settings_category)) },
         filteredItems = { term ->
-            if (term.isBlank()) dictionaryLocales
+            val entries = mutableListOf<DictEntry>(DictEntry.DeshWords)
+            if (term.isBlank())
+                dictionaryLocales.forEach { entries.add(DictEntry.LocaleEntry(it)) }
             else dictionaryLocales.filter { loc ->
                     loc != null
                     && loc.localizedDisplayName(ctx.resources).replace("(", "")
                         .splitOnWhitespace().any { it.startsWith(term, true) }
-                }
+                }.forEach { entries.add(DictEntry.LocaleEntry(it)) }
+            entries
         },
-        itemContent = { locale ->
-            if (locale == null) {
-                Row(
+        itemContent = { entry ->
+            when (entry) {
+                DictEntry.DeshWords -> Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier
-                        .clickable { showAddDictDialog = true }
-                        .padding(vertical = 4.dp, horizontal = 16.dp)
-                        .fillMaxWidth()
-                ) {
-                    Text(
-                        stringResource(R.string.add_new_dictionary_title),
-                    )
-                    Icon(painterResource(R.drawable.ic_plus), stringResource(R.string.add_new_dictionary_title))
-                }
-            } else {
-                Column(
-                    Modifier
-                        .clickable { selectedLocale = locale }
+                        .clickable { onClickDeshNativeWords() }
                         .padding(vertical = 6.dp, horizontal = 16.dp)
                         .fillMaxWidth()
                 ) {
-                    val (dicts, hasInternal) = getUserAndInternalDictionaries(ctx, locale)
-                    val types = dicts.mapTo(mutableListOf()) { it.name.substringBefore("_${DictionaryInfoUtils.USER_DICTIONARY_SUFFIX}") }
-                    if (hasInternal && !types.contains(Dictionary.TYPE_MAIN))
-                        types.add(0, stringResource(R.string.internal_dictionary_summary))
-                    Text(locale.localizedDisplayName(LocalResources.current))
                     Text(
-                        types.joinToString(", "),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        stringResource(R.string.desh_native_words_title),
+                        style = MaterialTheme.typography.titleMedium
                     )
+                    Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.desh_native_words_title))
+                }
+                is DictEntry.LocaleEntry -> {
+                    val locale = entry.locale
+                    if (locale == null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier
+                                .clickable { showAddDictDialog = true }
+                                .padding(vertical = 4.dp, horizontal = 16.dp)
+                                .fillMaxWidth()
+                        ) {
+                            Text(
+                                stringResource(R.string.add_new_dictionary_title),
+                            )
+                            Icon(painterResource(R.drawable.ic_plus), stringResource(R.string.add_new_dictionary_title))
+                        }
+                    } else {
+                        Column(
+                            Modifier
+                                .clickable { selectedLocale = locale }
+                                .padding(vertical = 6.dp, horizontal = 16.dp)
+                                .fillMaxWidth()
+                        ) {
+                            val (dicts, hasInternal) = getUserAndInternalDictionaries(ctx, locale)
+                            val types = dicts.mapTo(mutableListOf()) { it.name.substringBefore("_${DictionaryInfoUtils.USER_DICTIONARY_SUFFIX}") }
+                            if (hasInternal && !types.contains(Dictionary.TYPE_MAIN))
+                                types.add(0, stringResource(R.string.internal_dictionary_summary))
+                            Text(locale.localizedDisplayName(LocalResources.current))
+                            Text(
+                                types.joinToString(", "),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -161,7 +189,7 @@ private fun Preview() {
     initPreview(LocalContext.current)
     Theme(previewDark) {
         Surface {
-            DictionaryScreen { }
+            DictionaryScreen({ }, { })
         }
     }
 }

@@ -490,6 +490,17 @@
         android:imeSubtypeExtraValue="KeyboardLayoutSet=MAIN:desh_hindi,NoNumberRow,NoShiftKey,NoShiftProximityCorrection,EmojiCapable"
         android:isAsciiCapable="false"
     />
+    <!-- Dedicated Desh-style English keyboard. Separate engine behind the desh_english layout;
+         drives the Desh English dictionary/learning path instead of the HeliBoard suggestion pipeline. -->
+    <subtype android:icon="@drawable/ic_ime_switcher"
+        android:label="@string/subtype_desh_english_keyboard"
+        android:subtypeId="0x6d5a9b42"
+        android:imeSubtypeLocale="en_US"
+        android:languageTag="en-US"
+        android:imeSubtypeMode="keyboard"
+        android:imeSubtypeExtraValue="KeyboardLayoutSet=MAIN:desh_english,AsciiCapable,SupportTouchPositionCorrection,EmojiCapable"
+        android:isAsciiCapable="true"
+    />
     <!-- This Hinglish keyboard is a preliminary layout.
            This isn't based on the final specification.
            Was disabled because there is no LM yet, and this layout does not offer anything different. -->

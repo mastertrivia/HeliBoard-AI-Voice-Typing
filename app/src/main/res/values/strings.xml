@@ -454,6 +454,8 @@
     <string name="subtype_hi_Latn">Hinglish</string>
     <!-- Dedicated Desh-style Hindi keyboard subtype. -->
     <string name="subtype_desh_hindi_keyboard">देश हिंदी keyboard</string>
+    <!-- Dedicated Desh-style English keyboard subtype. -->
+    <string name="subtype_desh_english_keyboard">Desh English keyboard</string>
     <!-- Description for Mansi (https://en.wikipedia.org/wiki/Mansi_languages) keyboard subtype -->
     <string name="subtype_mns">Mansi</string>
     <!-- Description for Kaitag (https://en.wikipedia.org/wiki/Kaitag_language) keyboard subtype -->
@@ -731,12 +733,6 @@ New dictionary:
     <!-- Option for setting navbar to follow keyboard color -->
     <string name="theme_navbar">Color navigation bar</string>
     <!-- Theme name for light theme -->
-    <!-- Desboard built-in themes copied into HeliBoard's native Colours theme system. -->
-    <string name="theme_name_desboard_default_auto" tools:keep="@string/theme_name_desboard_default_auto">Desboard Default (Auto)</string>
-    <string name="theme_name_desboard_dark" tools:keep="@string/theme_name_desboard_dark">Desboard Dark</string>
-    <string name="theme_name_desboard_light" tools:keep="@string/theme_name_desboard_light">Desboard Light</string>
-    <string name="theme_name_desboard_high_contrast_blue" tools:keep="@string/theme_name_desboard_high_contrast_blue">Desboard High Contrast Blue</string>
-    <string name="theme_name_desboard_high_contrast_yellow" tools:keep="@string/theme_name_desboard_high_contrast_yellow">Desboard High Contrast Yellow</string>
     <string name="theme_name_light" tools:keep="@string/theme_name_light">Light</string>
     <!-- Theme name for holo white theme -->
     <string name="theme_name_holo_white" tools:keep="@string/theme_name_holo_white">Holo White</string>
@@ -842,6 +838,14 @@ New dictionary:
     <string name="translate_search_language">Search language</string>
     <string name="translate_select_source">Select source language</string>
     <string name="translate_select_target">Select target language</string>
+    <string name="translate_error_unknown">Unknown error</string>
+    <string name="translate_retry">Retry</string>
+    <string name="translate_try_shorter_text">Try with shorter text</string>
+    <string name="desh_native_words_title">Desh Hindi user words</string>
+    <string name="desh_native_words_add">Add word</string>
+    <string name="desh_native_words_edit_title">Desh Hindi user word</string>
+    <string name="desh_native_words_word_hint">Word</string>
+    <string name="desh_native_words_value_hint">Meaning / translation (optional)</string>
     <!-- Hint for users to tap the languages for settings -->
     <string name="text_tap_languages">Tap the language to open settings</string>
     <!-- Title of internal InputMethodPicker, strings should be same as the ones from Android system -->

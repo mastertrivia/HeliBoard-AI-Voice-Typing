@@ -53,6 +53,8 @@ public class VoiceController implements RecognitionListener {
     private float lastRms = 0.0f;
     private String pendingTypedChar = "";
     private int uiState = 0;
+    /** A stable segment was already committed this session. (was the note app's t flag) */
+    private boolean stableTextProcessed;
 
     /** 4000ms no-speech-error timer. (was b$a) */
     class NoSpeechErrorTimer extends CountDownTimer {
@@ -119,44 +121,50 @@ public class VoiceController implements RecognitionListener {
         }
     }
 
-    /** Connects to the recognizer: busy-wait for availability, then create + startListening. (was b$d) */
+    /** Connects to the recognizer: resolve service fresh if missing, then create + startListening immediately. (was b$d) */
     private class ConnectToRecognizerRunnable implements Runnable {
         RecognitionListener listener;
         Context context;
-        long startTime = System.currentTimeMillis();
-        long timeout = 5000;
 
         public ConnectToRecognizerRunnable(Context context, RecognitionListener recognitionListener) {
             this.context = context;
             this.listener = recognitionListener;
         }
 
-        public ConnectToRecognizerRunnable setTimeout(int i) {
-            this.timeout = i;
-            return this;
-        }
-
+        // Matches the note app (k.c$e): no busy-wait — resolve the service fresh when
+        // missing, then immediately create/start the recognizer so listening begins at once.
         @Override
         public void run() {
             SmartLog.a("ConnectToRecognizerRunnable", "run");
-            while (!SpeechRecognizer.isRecognitionAvailable(this.context) && System.currentTimeMillis() - this.startTime < this.timeout) {
+            if (VoiceController.this.recognitionService == null || VoiceController.this.recognitionService.length() == 0
+                    || VoiceController.this.recognitionService.equals("no_google_service")) {
+                VoiceController.this.recognitionService = VoiceController.this.resolveRecognitionService();
+                VoiceController.this.recognizer = null;
             }
-            if (SpeechRecognizer.isRecognitionAvailable(this.context)) {
-                SmartLog.a("ConnectToRecognizerRunnable", "isRecognitionAvailable true");
-                if (VoiceController.this.recognizer == null) {
-                    VoiceController voiceController = VoiceController.this;
-                    voiceController.recognizer = SpeechRecognizer.createSpeechRecognizer(this.context, voiceController.recognitionComponent);
-                    VoiceController.this.recognizer.setRecognitionListener(this.listener);
-                }
-                try {
-                    VoiceController.this.recognizer.startListening(VoiceController.this.recognitionIntent);
+            if (VoiceController.this.recognitionService.equals("no_service")) {
+                if (!SpeechRecognizer.isRecognitionAvailable(this.context)) {
+                    VoiceController.this.callback.onError(-2);
                     return;
-                } catch (Exception unused) {
                 }
-            } else {
-                SmartLog.a("ConnectToRecognizerRunnable", "isRecognitionAvailable false");
+                VoiceController.this.recognitionService = VoiceController.this.resolveRecognitionService();
+                VoiceController.this.recognizer = null;
             }
-            VoiceController.this.callback.onError(-2);
+            if (VoiceController.this.recognizer == null) {
+                ComponentName component = null;
+                if (!VoiceController.this.recognitionService.equals("default")
+                        && !VoiceController.this.recognitionService.equals("no_google_service")
+                        && !VoiceController.this.recognitionService.equals("no_service")) {
+                    component = ComponentName.unflattenFromString(VoiceController.this.recognitionService);
+                }
+                VoiceController.this.recognitionComponent = component;
+                VoiceController.this.recognizer = SpeechRecognizer.createSpeechRecognizer(this.context, component);
+                VoiceController.this.recognizer.setRecognitionListener(this.listener);
+            }
+            try {
+                VoiceController.this.recognizer.startListening(VoiceController.this.recognitionIntent);
+            } catch (Exception unused) {
+                VoiceController.this.callback.onError(-3);
+            }
         }
     }
 
@@ -214,6 +222,7 @@ public class VoiceController implements RecognitionListener {
     private void processStableText(String str, float f) {
         String str2;
         this.composingText = "";
+        this.stableTextProcessed = true;
         while (str.startsWith(" ")) {
             str = str.substring(1);
         }
@@ -347,11 +356,10 @@ public class VoiceController implements RecognitionListener {
         this.committedText = "";
         this.composingText = "";
         this.speechBegan = false;
+        this.stableTextProcessed = false;
         if (bool.booleanValue()) {
             cancelTimers();
-            ConnectToRecognizerRunnable connectToRecognizerRunnable = this.connectRunnable;
-            connectToRecognizerRunnable.setTimeout(5000);
-            connectToRecognizerRunnable.run();
+            this.connectRunnable.run();
         }
     }
 
@@ -448,7 +456,7 @@ public class VoiceController implements RecognitionListener {
         }
         this.noSpeechTimer.start();
         String str = bundle.getStringArrayList("results_recognition").get(0);
-        if (bundle.containsKey("android.speech.extra.UNSTABLE_TEXT")) {
+        if (bundle.containsKey("android.speech.extra.UNSTABLE_TEXT") || this.stableTextProcessed) {
             if (!this.normalizePunctuation) {
                 str = normalizePunctuation(str);
             }
@@ -481,7 +489,10 @@ public class VoiceController implements RecognitionListener {
     public void onResults(Bundle bundle) {
         SmartLog.a(VoiceController.class.getName(), "onResults: " + bundle.getStringArrayList("results_recognition").get(0));
         cancelTimers();
-        if (this.composingText.length() > 0) {
+        // Match the note app: commit the final result even when no partial preceded it
+        // (single words often arrive without a partial). Skip only when a stable segment
+        // was already committed this session (stableTextProcessed).
+        if (!this.stableTextProcessed) {
             bundle.getStringArrayList("results_recognition");
             bundle.getFloatArray("confidence_scores");
             String str = bundle.getStringArrayList("results_recognition").get(0);

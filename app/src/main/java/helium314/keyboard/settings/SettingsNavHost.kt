@@ -23,6 +23,7 @@ import helium314.keyboard.settings.screens.AiVoiceProfilesScreen
 import helium314.keyboard.settings.screens.AppearanceScreen
 import helium314.keyboard.settings.screens.ColorsScreen
 import helium314.keyboard.settings.screens.DebugScreen
+import helium314.keyboard.settings.screens.DeshNativeWordsScreen
 import helium314.keyboard.settings.screens.DictionaryScreen
 import helium314.keyboard.settings.screens.GestureTypingScreen
 import helium314.keyboard.settings.screens.LanguageScreen
@@ -137,7 +138,13 @@ fun SettingsNavHost(
             LanguageScreen(onClickBack = ::goBack)
         }
         composable(SettingsDestination.Dictionaries) {
-            DictionaryScreen(onClickBack = ::goBack)
+            DictionaryScreen(
+                onClickBack = ::goBack,
+                onClickDeshNativeWords = { navController.navigate(SettingsDestination.DeshNativeWords) },
+            )
+        }
+        composable(SettingsDestination.DeshNativeWords) {
+            DeshNativeWordsScreen(onClickBack = ::goBack)
         }
         composable(SettingsDestination.Layouts) {
             SecondaryLayoutScreen(onClickBack = ::goBack)
@@ -178,6 +185,7 @@ object SettingsDestination {
     const val Subtype = "subtype/"
     const val Layouts = "layouts"
     const val Dictionaries = "dictionaries"
+    const val DeshNativeWords = "desh_native_words"
     val navTarget = MutableStateFlow(Settings)
 
     private val navScope = CoroutineScope(Dispatchers.Default)

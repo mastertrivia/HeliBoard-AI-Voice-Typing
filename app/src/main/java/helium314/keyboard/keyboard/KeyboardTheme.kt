@@ -55,11 +55,6 @@ private constructor(val themeId: Int, @JvmField val mStyleId: Int) {
         const val THEME_DARKER = "darker"
         const val THEME_BLACK = "black"
         const val THEME_DYNAMIC = "dynamic"
-        const val THEME_DESBOARD_DEFAULT_AUTO = "desboard_default_auto"
-        const val THEME_DESBOARD_DARK = "desboard_dark"
-        const val THEME_DESBOARD_LIGHT = "desboard_light"
-        const val THEME_DESBOARD_HIGH_CONTRAST_BLUE = "desboard_high_contrast_blue"
-        const val THEME_DESBOARD_HIGH_CONTRAST_YELLOW = "desboard_high_contrast_yellow"
         const val THEME_BLUE_GRAY = "blue_gray"
         const val THEME_BROWN = "brown"
         const val THEME_CHOCOLATE = "chocolate"
@@ -71,13 +66,6 @@ private constructor(val themeId: Int, @JvmField val mStyleId: Int) {
         const val THEME_SAND = "sand"
         const val THEME_VIOLETTE = "violette"
         fun getAvailableDefaultColors(prefs: SharedPreferences, isNight: Boolean) = listOfNotNull(
-            // Desboard presets are deliberately registered as built-in color themes so they
-            // appear directly under Appearance -> Colours and are not hidden as user themes.
-            THEME_DESBOARD_DEFAULT_AUTO,
-            THEME_DESBOARD_DARK,
-            THEME_DESBOARD_LIGHT,
-            THEME_DESBOARD_HIGH_CONTRAST_BLUE,
-            THEME_DESBOARD_HIGH_CONTRAST_YELLOW,
             if (!isNight) THEME_LIGHT else null, THEME_DARK,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) THEME_DYNAMIC else null,
             if (prefs.getString(Settings.PREF_THEME_STYLE, Defaults.PREF_THEME_STYLE) == STYLE_HOLO) THEME_HOLO_WHITE else null,
@@ -164,74 +152,6 @@ private constructor(val themeId: Int, @JvmField val mStyleId: Int) {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) DynamicColors(context, themeStyle, hasBorders, backgroundImage)
                     else getThemeColors(THEME_LIGHT, themeStyle, context, prefs, isNight)
                 }
-                THEME_DESBOARD_DEFAULT_AUTO ->
-                    getThemeColors(
-                        if (isNight) THEME_DESBOARD_DARK else THEME_DESBOARD_LIGHT,
-                        themeStyle,
-                        context,
-                        prefs,
-                        isNight,
-                    )
-                THEME_DESBOARD_LIGHT -> DefaultColors(
-                    themeStyle,
-                    hasBorders,
-                    "#4A8279".toColorInt(),  // sampled from the Desh Default/Light preview accent
-                    "#F8F9FB".toColorInt(),  // Desh Default/Light preview background
-                    Color.WHITE,
-                    "#CBD0D6".toColorInt(),
-                    "#E2E6E9".toColorInt(),
-                    "#0B1919".toColorInt(),
-                    "#4A6762".toColorInt(),
-                    "#0B1919".toColorInt(),
-                    "#4A6762".toColorInt(),
-                    "#4A8279".toColorInt(),
-                    keyboardBackground = backgroundImage
-                )
-                THEME_DESBOARD_DARK -> DefaultColors(
-                    themeStyle,
-                    hasBorders,
-                    "#4B6661".toColorInt(),  // Desh Default/Dark preview accent
-                    "#2B3131".toColorInt(),  // Desh Default/Dark preview background
-                    "#373D3D".toColorInt(),
-                    "#3F4A49".toColorInt(),
-                    "#373D3D".toColorInt(),
-                    Color.WHITE,
-                    "#C8D2D0".toColorInt(),
-                    Color.WHITE,
-                    "#C8D2D0".toColorInt(),
-                    "#4B6661".toColorInt(),
-                    keyboardBackground = backgroundImage
-                )
-                THEME_DESBOARD_HIGH_CONTRAST_BLUE -> DefaultColors(
-                    themeStyle,
-                    hasBorders,
-                    "#00F0FF".toColorInt(),  // explicit Desh APK high-contrast blue accent literal
-                    "#0A0A0A".toColorInt(),
-                    "#171A1F".toColorInt(),
-                    "#00175F".toColorInt(),
-                    "#171A1F".toColorInt(),
-                    Color.WHITE,
-                    "#B8FFFF".toColorInt(),
-                    Color.WHITE,
-                    "#B8FFFF".toColorInt(),
-                    "#00F0FF".toColorInt(),
-                    keyboardBackground = backgroundImage
-                )
-                THEME_DESBOARD_HIGH_CONTRAST_YELLOW -> DefaultColors(
-                    themeStyle,
-                    hasBorders,
-                    "#FFD400".toColorInt(),  // explicit Desh APK high-contrast yellow accent literal
-                    "#0A0A0A".toColorInt(),
-                    "#171717".toColorInt(),
-                    "#3A2F00".toColorInt(),
-                    "#171717".toColorInt(),
-                    Color.WHITE,
-                    "#FFF0A3".toColorInt(),
-                    Color.WHITE,
-                    "#FFF0A3".toColorInt(),
-                    "#FFD400".toColorInt(),
-                    keyboardBackground = backgroundImage
-                )
                 THEME_LIGHT -> DefaultColors(
                     themeStyle,
                     hasBorders,

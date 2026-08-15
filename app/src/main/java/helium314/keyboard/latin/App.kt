@@ -2,7 +2,6 @@
 package helium314.keyboard.latin
 
 import helium314.keyboard.latin.personalization.DeshEnglishLearningManager
-import helium314.keyboard.latin.personalization.DeshStyleLearningStore
 import android.app.Application
 import android.os.Build
 import helium314.keyboard.keyboard.emoji.SupportedEmojis
@@ -30,7 +29,7 @@ class App : Application() {
         DeshHindiPredictor.initialize(this)
         DeshEnglishDictionaryLoader.initialize(this)
         DeshEnglishLearningManager.initialize(this)
-        DeshStyleLearningStore.initialize(this)
+        DeshNativeWordStore.initialize(this)
         SubtypeSettings.init(this)
 
         val scope = CoroutineScope(Dispatchers.Default)

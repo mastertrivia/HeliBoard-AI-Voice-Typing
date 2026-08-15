@@ -29,7 +29,6 @@ import helium314.keyboard.latin.dictionary.ExpandableBinaryDictionary
 import helium314.keyboard.latin.dictionary.UserBinaryDictionary
 import helium314.keyboard.latin.permissions.PermissionsUtil
 import helium314.keyboard.latin.personalization.UserHistoryDictionary
-import helium314.keyboard.latin.personalization.DeshStyleLearningStore
 import helium314.keyboard.latin.personalization.DeshEnglishLearningManager
 import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.settings.SettingsValuesForSuggestion
@@ -326,14 +325,13 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
                 preferredGroup, ngramContextForCurrentWord, currentWord,
                 wasCurrentWordAutoCapitalized, timeStampInSeconds.toInt(), blockPotentiallyOffensive
             )
-            // Keep a separate fast learner so a newly accepted word is searchable immediately,
-            // without waiting for UserHistoryDictionary consolidation or the personal-dictionary threshold.
+            // Desh English keeps its own learned-dictionary path. Other locales (incl. Desh
+            // Hindi) deliberately have no automatic learning here: Desh does not auto-learn
+            // typed words (its user words are manual, see DeshNativeWordStore), and normal
+            // HeliBoard personalization flows through addWordToUserHistory above as usual.
             if (preferredGroup.locale.language == "en") runCatching {
                 DeshEnglishLearningManager.learn(preferredGroup.locale, ngramContextForCurrentWord, currentWord, timeStampInSeconds.toInt())
             }.onFailure { Log.w(TAG, "Desh English learned-dictionary update failed", it) }
-            else runCatching {
-                DeshStyleLearningStore.get()?.record(preferredGroup.locale, currentWord, ngramContextForCurrentWord)
-            }.onFailure { Log.w(TAG, "Immediate learner update failed", it) }
             ngramContextForCurrentWord = ngramContextForCurrentWord.getNextNgramContext(WordInfo(currentWord))
 
             // remove manually entered blacklisted words from blacklist for likely matching languages
@@ -615,7 +613,6 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
     override fun clearUserHistoryDictionary(context: Context) {
         for (dictionaryGroup in dictionaryGroups) {
             dictionaryGroup.getSubDict(Dictionary.TYPE_USER_HISTORY)?.clear()
-            runCatching { DeshStyleLearningStore.get(context).clear(dictionaryGroup.locale) }
         }
     }
 

@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ported from Desh Keyboard's layout_translation_view.xml (v17.4.9).
+     ConstraintLayout is not a HeliBoard dependency, so the same visual
+     structure (close button top-right, from/switch/to language row, rounded
+     input box) is reproduced with FrameLayout/LinearLayout. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/translation_panel"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingBottom="8dp">
+
+    <!-- language row: from label + switch + to label -->
+    <LinearLayout
+        android:id="@+id/clTranslateFromToContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="2dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tvTranslateFrom"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/translation_language_name_bg"
+            android:ellipsize="end"
+            android:maxEms="6"
+            android:maxLines="1"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:textSize="16sp" />
+
+        <ImageButton
+            android:id="@+id/ibLanguageSwitchSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/translation_language_name_bg"
+            android:contentDescription="@string/translate_switch_languages"
+            android:minHeight="34dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_translate_language_switch"
+            style="?attr/suggestionWordStyle" />
+
+        <TextView
+            android:id="@+id/tvTranslateTo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/translation_language_name_bg"
+            android:ellipsize="end"
+            android:maxEms="6"
+            android:maxLines="1"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:textSize="16sp" />
+    </LinearLayout>
+
+    <!-- close button, top right -->
+    <ImageButton
+        android:id="@+id/closeTranslate"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_gravity="top|end"
+        android:contentDescription="@string/translate_close"
+        android:padding="8dp"
+        android:src="@drawable/ic_close"
+        style="?attr/suggestionWordStyle" />
+
+    <!-- error row (Desh cl_error): no-internet/error icon, message, retry -->
+    <LinearLayout
+        android:id="@+id/cl_error"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="46dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/icNoInternet"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@drawable/ic_no_internet" />
+
+        <ImageView
+            android:id="@+id/icError"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:src="@drawable/ic_unknown_error"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/tvError"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/tvDots"
+            android:layout_width="20dp"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/btnRetry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/translation_language_name_bg"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:text="@string/translate_retry"
+            android:textSize="16sp" />
+    </LinearLayout>
+
+    <!-- input box -->
+    <LinearLayout
+        android:id="@+id/cvEditText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginStart="8dp"
+        android:layout_marginTop="48dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginBottom="8dp"
+        android:background="@drawable/translation_view_edit_text_bg"
+        android:orientation="vertical">
+
+        <EditText
+            android:id="@+id/etTranslate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="4dp"
+            android:background="@null"
+            android:ellipsize="end"
+            android:gravity="start"
+            android:inputType="textMultiLine"
+            android:maxLines="3"
+            android:minHeight="30dp"
+            android:minLines="1"
+            android:textCursorDrawable="@drawable/cursor_drawable_with_primary_text_color"
+            android:textSize="16sp" />
+
+        <!-- Speak / mic (Desh translation_mic_icon.xml) -->
+        <Button
+            android:id="@+id/btnSpeak"
+            android:layout_width="wrap_content"
+            android:layout_height="34dp"
+            android:layout_gravity="end"
+            android:layout_marginEnd="10dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/translation_language_name_bg"
+            android:drawableStart="@drawable/sym_keyboard_voice_lxx"
+            android:drawablePadding="6dp"
+            android:text="@string/translate_speak"
+            android:textAllCaps="false"
+            android:textSize="14sp" />
+    </LinearLayout>
+</FrameLayout>
