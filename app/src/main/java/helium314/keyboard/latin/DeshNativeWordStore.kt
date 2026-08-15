@@ -63,11 +63,11 @@ object DeshNativeWordStore {
     }
 
     /** All stored pairs, for the settings screen (Desh's UserNativeWordListActivity). */
-    fun all(): Map<String, String> {
-        val p = prefs ?: return emptyMap()
+    fun all(): List<Pair<String, String>> {
+        val p = prefs ?: return emptyList()
         return p.all.mapNotNull { (key, value) ->
             (value as? String)?.let { key to it }
-        }.toMap()
+        }
     }
 
     fun clear() {
