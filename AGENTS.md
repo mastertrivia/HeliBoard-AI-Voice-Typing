@@ -61,14 +61,26 @@ re-applied before pushing. These regressed CI in ZIP 3:
   does NOT apply anymore — check `DeshTranslationEngine.kt` instead for the
   getOrNull import and any coroutine usage.
 
+### 4. ZIPs may REMOVE features too (delete stale files, don't just overwrite)
+
+The user occasionally deletes whole features/files from the source. The sync
+step must therefore ALSO delete any file that exists in the current workspace
+tree but is NOT present in the new ZIP (a plain overwrite-copy leaves the old
+file in place, so the removed feature silently comes back in the build). Exclude
+`.git/` and `AGENTS.md` from deletion. After a removal-style sync, confirm via
+`git status` that the deleted files show up as `D` and are included in the
+commit. If the removed feature had callers elsewhere, run the cross-reference
+checks and delete those too (CI will flag any dangling references).
+
 ## Workflow
 
 1. Download the ZIP, extract (paths use backslashes on Windows).
 2. Sync the whole tree over `/workspace`, skipping root-level dev-doc bloat
    (files matching `CODEX_*`, `DESH_*`, `SPEECHNOTES_*`, `VOICE_*`, `STEP8_*`,
    `AI_*`, `HANDOVER.md`, `layouts.md`, `PHASE13C_REPORT.md`, and the
-   `REFERENCE_APPS` directory).
-3. Apply the fixes in the three sections above (isActive import, gradlew.bat
+   `REFERENCE_APPS` directory). If files were REMOVED from the ZIP, delete the
+   corresponding stale files from `/workspace` too (see section 4).
+3. Apply the fixes in the sections above (isActive import, gradlew.bat
    mode, and the DeshNativeWordStore/DeshTranslationView regressions in
    section 3).
 4. Commit and push to `main`. CI (`Build APK` workflow) runs `assembleDebug`.
