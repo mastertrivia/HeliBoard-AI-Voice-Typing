@@ -32,6 +32,17 @@ public abstract class Dictionary {
     public static final PhonyDictionary DICTIONARY_USER_SHORTCUT =
             new PhonyDictionary(TYPE_USER_SHORTCUT);
 
+    /**
+     * Desh's USER_NATIVE_WORD kind (usernativewords/a.a): a word manually added via
+     * the Desh native-word settings screen. Desh renders these suggestions in italic
+     * (CandidateView bind -> w(view, Typeface.ITALIC)); the strip helper checks this
+     * dict to reproduce that styling. Not a real dictionary — a marker like
+     * DICTIONARY_USER_TYPED.
+     */
+    public static final String TYPE_DESH_USER_NATIVE = "desh_user_native";
+    public static final PhonyDictionary DICTIONARY_DESH_USER_NATIVE =
+            new PhonyDictionary(TYPE_DESH_USER_NATIVE);
+
     public static final String TYPE_APPLICATION_DEFINED = "application_defined";
     public static final PhonyDictionary DICTIONARY_APPLICATION_DEFINED =
             new PhonyDictionary(TYPE_APPLICATION_DEFINED);

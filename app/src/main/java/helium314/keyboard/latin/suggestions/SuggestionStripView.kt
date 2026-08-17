@@ -600,6 +600,13 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         } else {
             (button.drawable as? AnimatedVectorDrawable)?.stop()
             button.setImageDrawable(KeyboardIconsSet.instance.getNewDrawable(ToolbarKey.VOICE.name, context))
+            // The freshly fetched mic drawable bypasses the normal toolbar setup
+            // path (setupKey -> colors.setColor(TOOL_BAR_KEY)), so it would render
+            // with the raw drawable's built-in white until the next theme change
+            // rebuilds the toolbar. Re-apply the same theme tint here so the icon
+            // stays correct immediately after Voice stops (Light -> dark mic,
+            // Dark -> light mic), exactly like every other toolbar icon.
+            Settings.getValues().mColors.setColor(button, ColorType.TOOL_BAR_KEY)
         }
     }
 

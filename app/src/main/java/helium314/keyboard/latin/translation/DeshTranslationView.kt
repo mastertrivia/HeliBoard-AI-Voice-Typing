@@ -104,7 +104,8 @@ class DeshTranslationView @JvmOverloads constructor(
         applyThemeColors()
     }
 
-    private fun applyThemeColors() {
+    /** Re-applied on every open so the panel always reflects the current theme. */
+    fun applyThemeColors() {
         val colors = Settings.getValues()?.mColors ?: return
         colors.setBackground(this, ColorType.STRIP_BACKGROUND)
         listOf<android.view.View>(btnRetry, tvTranslateFrom, tvTranslateTo).forEach { pill ->
@@ -236,6 +237,13 @@ class DeshTranslationView @JvmOverloads constructor(
             code in 1..0x10FFFF -> { return runCatching { insertText(String(Character.toChars(code))) }.isSuccess }
         }
         return false
+    }
+
+    /** Multi-codepoint text routing (conjunct keys, emoji): inserts into the box. */
+    fun handleText(value: String): Boolean {
+        if (!isOpen()) return false
+        insertText(value)
+        return true
     }
 
     private fun insertText(value: String) {

@@ -86,7 +86,9 @@ class SerialTranscriptionDispatcherFailoverTest {
         val activeProfile: ApiProfile,
         script: (profileId: String) -> Script,
         failureRotationEnabled: Boolean = true,
-        diagnostics: AiDiagnosticsSink,
+        // `val` (not a plain parameter): Kotlin 2.3.20 fails to resolve a plain fun-interface
+        // constructor parameter inside member functions, but resolves property access fine.
+        val diagnostics: AiDiagnosticsSink,
     ) {
         val provider = RecordingProvider("groq", script)
         val repo = FakeRepository(AiVoiceConfig(

@@ -36,6 +36,19 @@ object DeshInputEngine {
     fun isDeshSubtype(mainLayoutName: String?): Boolean =
         isDeshHindiSubtype(mainLayoutName) || isDeshEnglishSubtype(mainLayoutName)
 
+    /**
+     * All Devanagari Hindi main-layout names (the built-in Hindi layouts plus the
+     * isolated Desh Hindi one). HeliBoard ships no Hindi .dict file, so the Desh
+     * native vocabulary is the only Hindi dictionary source and should serve every
+     * Hindi subtype — not just desh_hindi.
+     */
+    val HINDI_DEVANAGARI_LAYOUTS: Set<String> = setOf(
+        "desh_hindi", "hindi", "hindi_compact", "hindi_phonetic"
+    )
+
+    fun isHindiDevanagariSubtype(mainLayoutName: String?): Boolean =
+        mainLayoutName in HINDI_DEVANAGARI_LAYOUTS
+
     // ------------------------------------------------------------------
     // Hindi composition state machine (vowel/matra)
     // ------------------------------------------------------------------
@@ -52,11 +65,16 @@ object DeshInputEngine {
         return DeshHindiLayoutData.findDeshHindiSyllable(textBeforeCursor) != null
     }
 
-    /** Returns the same longest valid Desh syllable suffix used by the reference keyboard. */
+    /**
+     * The active Desh Hindi syllable before the cursor (fe.f.d -> fe.f.F), or null
+     * when no vowel-diacritic syllable is present. This drives the vowel-key label
+     * composition (syllable + matra) exactly like Desh's fe/f.F state.
+     */
     @JvmStatic
-    fun findVowelDisplayPrefix(textBeforeCursor: CharSequence?): String {
-        if (textBeforeCursor == null || textBeforeCursor.isEmpty()) return ""
-        return DeshHindiLayoutData.findDeshHindiSyllable(textBeforeCursor).orEmpty()
+    fun findDeshHindiSyllable(textBeforeCursor: CharSequence?): String? {
+        if (textBeforeCursor == null || textBeforeCursor.length == 0)
+            return null
+        return DeshHindiLayoutData.findDeshHindiSyllable(textBeforeCursor)
     }
 
     /** True for the अ key that exits vowel mode without inserting text. */

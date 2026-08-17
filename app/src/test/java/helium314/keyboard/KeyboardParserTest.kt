@@ -487,6 +487,55 @@ f""", // no newline at the end
         }
     }
 
+    @Test fun deshHindiVowelSelectorComposedLabel() {
+        // Mirrors Desh's mainkeyboard/a label building: when a syllable is active
+        // (fe.f.F non-null), vowel keys display `syllable + matra` (क + ा = का)
+        // while the underlying code stays the matra; with no syllable they show
+        // the standalone form (आ).
+        val json = """
+            [[
+              { "$": "desh_hindi_vowel_selector",
+                "default": { "label": "आ", "popup": { "main": { "label": "ा" } } },
+                "active":  { "label": "ा", "popup": { "main": { "label": "आ" } } } },
+              { "$": "desh_hindi_vowel_selector",
+                "default": { "label": "ई", "popup": { "main": { "label": "ी" } } },
+                "active":  { "label": "ी", "popup": { "main": { "label": "ई" } } } },
+              { "$": "desh_hindi_vowel_selector",
+                "default": { "label": "अ" },
+                "active":  { "code": -10058, "label": "अ" } }
+            ]]
+        """
+
+        // No active syllable: standalone vowel labels (default branch).
+        params.mId = params.mId.copy(deshHindiActiveSyllable = null)
+        val standalone = LayoutParser.parseJsonString(json)
+            .flatMap { row -> row.mapNotNull { it.compute(params)?.toKeyParams(params) } }
+        assertEquals("आ", standalone[0].mLabel)
+        assertEquals("ई", standalone[1].mLabel)
+        assertEquals("अ", standalone[2].mLabel)
+
+        // Active syllable क: labels become का / की / क (syllable + matra), the
+        // codes stay the matra code points, and the no-input-vowel key (Desh
+        // code -28 == our DESH_NO_INPUT_VOWEL) keeps just the syllable.
+        params.mId = params.mId.copy(deshHindiActiveSyllable = "क")
+        val composed = LayoutParser.parseJsonString(json)
+            .flatMap { row -> row.mapNotNull { it.compute(params)?.toKeyParams(params) } }
+        assertEquals("का", composed[0].mLabel)
+        assertEquals('ा'.code, composed[0].mCode)
+        assertEquals("की", composed[1].mLabel)
+        assertEquals('ी'.code, composed[1].mCode)
+        assertEquals("क", composed[2].mLabel)
+        assertEquals(KeyCode.DESH_NO_INPUT_VOWEL, composed[2].mCode)
+
+        // Active conjunct syllable क्ष: क्षा / क्षी (conjunct + matra).
+        params.mId = params.mId.copy(deshHindiActiveSyllable = "क्ष")
+        val conjunct = LayoutParser.parseJsonString(json)
+            .flatMap { row -> row.mapNotNull { it.compute(params)?.toKeyParams(params) } }
+        assertEquals("क्षा", conjunct[0].mLabel)
+        assertEquals("क्षी", conjunct[1].mLabel)
+        assertEquals("क्ष", conjunct[2].mLabel)
+    }
+
     @Test fun parseExistingLayouts() {
         val dir = File("src/main/assets/layouts")
         dir.walk().forEach {

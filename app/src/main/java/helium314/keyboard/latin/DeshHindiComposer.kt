@@ -80,6 +80,35 @@ class DeshHindiComposer(private val host: Host) {
         active = ""
     }
 
+    /** True while the composer holds an unfinished composed syllable. */
+    fun hasActiveSyllable(): Boolean = active.isNotEmpty()
+
+    /** Commits any pending syllable and clears the composition state. */
+    fun commitPending() {
+        if (active.isEmpty()) return
+        host.commitText(active)
+        active = ""
+    }
+
+    /**
+     * Desh vowel-diacritic mode, owned by the composer.
+     *
+     * True while the composed syllable can still take a matra (i.e. it is a member of
+     * Desh's own syllable set, all of which end in a consonant). Deriving this from the
+     * editor text instead would race with the asynchronous setComposingText round-trip
+     * and keep the vowel keys permanently standalone.
+     */
+    fun isVowelDiacriticMode(): Boolean =
+        active.isNotEmpty() && DeshHindiLayoutData.SYLLABLES.contains(active)
+
+    /**
+     * The current syllable while vowel-diacritic mode is active (Desh's fe.f.F).
+     * Null when the keys should show their standalone vowel forms. This is the
+     * exact state Desh's mainkeyboard/a uses to compose key labels as syllable+matra.
+     */
+    fun getActiveSyllable(): String? =
+        if (isVowelDiacriticMode()) active else null
+
     /** Handles a single-key event (letter keys arrive here). */
     fun onKey(code: Int): Boolean {
         return try {
@@ -216,11 +245,18 @@ class DeshHindiComposer(private val host: Host) {
         return null
     }
 
-    /** Our composed syllable must match the actual text, otherwise the editor moved
-     *  the cursor / committed / the app edited the text — start over. */
+    /**
+     * Our composed syllable must match the actual text, otherwise the editor moved
+     * the cursor / committed / the app edited the text — start over.
+     *
+     * The read immediately after our own setComposingText can lag (async
+     * InputConnection round-trip), so an empty read is never trusted here — only a
+     * non-empty read that definitively no longer ends with our composition wipes it.
+     */
     private fun sync() {
         if (active.isEmpty()) return
         val before = host.getTextBeforeCursor(active.length + 8) ?: return
+        if (before.isEmpty()) return
         if (!before.endsWith(active))
             active = ""
     }

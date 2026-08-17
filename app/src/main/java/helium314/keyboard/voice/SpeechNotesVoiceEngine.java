@@ -54,7 +54,10 @@ public class SpeechNotesVoiceEngine implements VoiceCallback {
 
     public SpeechNotesVoiceEngine(LatinIME ime) {
         this.ime = ime;
-        this.controller = new VoiceController(ime, this, language, Boolean.TRUE);
+        // Build the BT SCO manager first: VoiceController's constructor can fire
+        // onError (e.g. no speech service on the device) which calls stop() on
+        // this engine, and stop() touches bluetoothSco. Ordering it first makes
+        // that path a safe no-op (started == false) instead of an NPE.
         this.bluetoothSco = new BluetoothScoManager(ime) {
             @Override
             public void onHeadsetConnected() {
@@ -74,6 +77,7 @@ public class SpeechNotesVoiceEngine implements VoiceCallback {
                 stop();
             }
         };
+        this.controller = new VoiceController(ime, this, language, Boolean.TRUE);
         this.watchdog = new CountDownTimer(WATCHDOG_MILLIS, WATCHDOG_TICK) { // was Speechkeys$a
             @Override
             public void onTick(long millisUntilFinished) {
@@ -118,11 +122,16 @@ public class SpeechNotesVoiceEngine implements VoiceCallback {
 
     /** Full stop: BT SCO + controller + watchdog + wake lock. (was Speechkeys.Z) */
     public void stop() {
-        bluetoothSco.stop();
-        if (controller.isListening()) {
+        // Null-safe: VoiceController's constructor can call onError (no speech
+        // service) which stops this engine while controller/bluetoothSco are
+        // still being initialized.
+        if (bluetoothSco != null)
+            bluetoothSco.stop();
+        if (controller != null && controller.isListening()) {
             controller.stopListening();
         }
-        watchdog.cancel();
+        if (watchdog != null)
+            watchdog.cancel();
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release();
         }

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Desh Keyboard ic_close.xml verbatim (22dp thin-line cross, evenOdd fillType).
+     White fill, tinted at runtime with the HeliBoard theme color. -->
+<vector android:height="22.0dip" android:width="22.0dip" android:viewportWidth="22.0" android:viewportHeight="22.0"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <path android:fillColor="#FFFFFF" android:pathData="M4.9,17.1L4.9,17.1c-0.4,-0.4 -0.4,-1 0,-1.4L15.7,4.9c0.4,-0.4 1,-0.4 1.4,0l0,0c0.4,0.4 0.4,1 0,1.4L6.3,17.1C5.9,17.4 5.3,17.4 4.9,17.1z" android:fillType="evenOdd" />
+    <path android:fillColor="#FFFFFF" android:pathData="M17.1,17.1L17.1,17.1c0.4,-0.4 0.4,-1 0,-1.4L6.3,4.9c-0.4,-0.4 -1,-0.4 -1.4,0l0,0c-0.4,0.4 -0.4,1 0,1.4L15.6,17C16.1,17.4 16.7,17.4 17.1,17.1z" android:fillType="evenOdd" />
+</vector>

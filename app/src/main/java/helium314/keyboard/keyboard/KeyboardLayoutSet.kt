@@ -116,8 +116,8 @@ class KeyboardLayoutSet internal constructor(private val mContext: Context, priv
         var deviceLocked = Settings.getValues().mIsLocked
         var numberRowEnabled = false
         var numberRowInSymbols = false
-        var deshHindiVowelDiacriticMode = false
-        var deshHindiVowelPrefix: String = ""
+        /** Active Desh Hindi syllable for composing vowel-key labels (fe.f.F); null = standalone. */
+        var deshHindiActiveSyllable: String? = null
         var languageSwitchKeyEnabled = false
         var emojiKeyEnabled = false
         var oneHandedModeEnabled = false
@@ -176,13 +176,8 @@ class KeyboardLayoutSet internal constructor(private val mContext: Context, priv
             return this
         }
         
-        fun setDeshHindiVowelDiacriticMode(enabled: Boolean): Builder {
-            params.deshHindiVowelDiacriticMode = enabled
-            return this
-        }
-
-        fun setDeshHindiVowelPrefix(prefix: String?): Builder {
-            params.deshHindiVowelPrefix = prefix ?: ""
+        fun setDeshHindiActiveSyllable(syllable: String?): Builder {
+            params.deshHindiActiveSyllable = syllable
             return this
         }
 

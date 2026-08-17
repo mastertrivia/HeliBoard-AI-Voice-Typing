@@ -40,6 +40,7 @@ import helium314.keyboard.accessibility.AccessibilityUtils;
 import helium314.keyboard.keyboard.KeyboardTypeface;
 import helium314.keyboard.latin.PunctuationSuggestions;
 import helium314.keyboard.latin.R;
+import helium314.keyboard.latin.dictionary.Dictionary;
 import helium314.keyboard.latin.SuggestedWords;
 import helium314.keyboard.latin.SuggestedWords.SuggestedWordInfo;
 import helium314.keyboard.latin.common.ColorType;
@@ -88,6 +89,9 @@ final class SuggestionStripLayoutHelper {
 
     private static final CharacterStyle BOLD_SPAN = new StyleSpan(Typeface.BOLD);
     private static final CharacterStyle UNDERLINE_SPAN = new UnderlineSpan();
+    // Desh's CandidateView renders USER_NATIVE_WORD suggestions with Typeface.ITALIC
+    // (w(view, 2)); reproduce that styling for the same user-word kind here.
+    private static final CharacterStyle ITALIC_SPAN = new StyleSpan(Typeface.ITALIC);
 
     private final int mSuggestionStripOptions;
     // These constants are the flag values of
@@ -198,7 +202,10 @@ final class SuggestionStripLayoutHelper {
                 && indexInSuggestedWords == SuggestedWords.INDEX_OF_AUTO_CORRECTION;
         final boolean isTypedWordValid = suggestedWords.mTypedWordValid
                 && indexInSuggestedWords == SuggestedWords.INDEX_OF_TYPED_WORD;
-        if (!isAutoCorrection && !isTypedWordValid) {
+        // Desh's user-native words (USER_NATIVE_WORD kind) are shown in italic.
+        final boolean isDeshUserNativeWord = suggestedWords.getInfo(indexInSuggestedWords).mSourceDict
+                == Dictionary.DICTIONARY_DESH_USER_NATIVE;
+        if (!isAutoCorrection && !isTypedWordValid && !isDeshUserNativeWord) {
             return word;
         }
 
@@ -210,6 +217,9 @@ final class SuggestionStripLayoutHelper {
         }
         if (isAutoCorrection && (options & AUTO_CORRECT_UNDERLINE) != 0) {
             addStyleSpan(spannedWord, UNDERLINE_SPAN);
+        }
+        if (isDeshUserNativeWord) {
+            addStyleSpan(spannedWord, ITALIC_SPAN);
         }
         return spannedWord;
     }
@@ -552,10 +562,11 @@ final class SuggestionStripLayoutHelper {
         paint.setTextScaleX(MIN_TEXT_XSCALE);
         final boolean hasBoldStyle = hasStyleSpan(text, BOLD_SPAN);
         final boolean hasUnderlineStyle = hasStyleSpan(text, UNDERLINE_SPAN);
+        final boolean hasItalicStyle = hasStyleSpan(text, ITALIC_SPAN);
         // TextUtils.ellipsize erases any span object existed after ellipsized point.
         // We have to restore these spans afterward.
         final CharSequence ellipsizedText = TextUtils.ellipsize(text, paint, maxWidth, TextUtils.TruncateAt.MIDDLE);
-        if (!hasBoldStyle && !hasUnderlineStyle) {
+        if (!hasBoldStyle && !hasUnderlineStyle && !hasItalicStyle) {
             return ellipsizedText;
         }
         final Spannable spannableText = (ellipsizedText instanceof Spannable)
@@ -565,6 +576,9 @@ final class SuggestionStripLayoutHelper {
         }
         if (hasUnderlineStyle) {
             addStyleSpan(spannableText, UNDERLINE_SPAN);
+        }
+        if (hasItalicStyle) {
+            addStyleSpan(spannableText, ITALIC_SPAN);
         }
         return spannableText;
     }
@@ -604,6 +618,9 @@ final class SuggestionStripLayoutHelper {
     }
 
     private static Typeface getTextTypeface(@Nullable final CharSequence text) {
-        return hasStyleSpan(text, BOLD_SPAN) ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT;
+        final boolean italic = hasStyleSpan(text, ITALIC_SPAN);
+        if (hasStyleSpan(text, BOLD_SPAN))
+            return Typeface.create(Typeface.DEFAULT, Typeface.BOLD | (italic ? Typeface.ITALIC : 0));
+        return italic ? Typeface.create(Typeface.DEFAULT, Typeface.ITALIC) : Typeface.DEFAULT;
     }
 }

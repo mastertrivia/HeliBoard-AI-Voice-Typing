@@ -136,10 +136,15 @@ class ShiftStateSelector(
  * Selects between the independent-vowel and vowel-diacritic form used by the
  * built-in "देश हिंदी keyboard" subtype.
  *
- * The state is part of KeyboardId so the keyboard cache keeps the two rendered
- * states separate. This is intentionally a keyboard-level state selector:
- * the text/composition engine decides when the state changes, while the layout
- * only describes which glyphs should be displayed in each state.
+ * Mirrors Desh's mainkeyboard/a.smali label building: when a syllable is active
+ * (fe.f.F non-null), each vowel key's *displayed label* is composed as
+ * `syllable + matra` (e.g. क + ा = का), while the underlying key code stays the
+ * matra so the inserted text is unchanged. When no syllable is active, the key
+ * shows its standalone form (अ आ इ …).
+ *
+ * The syllable is part of KeyboardId so the keyboard cache keeps the states
+ * separate and reloads whenever the syllable changes (exactly Desh's
+ * zg/e.s -> mainkeyboard/a.l re-render on syllable change).
  */
 @Serializable
 @SerialName("desh_hindi_vowel_selector")
@@ -148,21 +153,20 @@ class DeshHindiVowelSelector(
     val default: AbstractKeyData,
 ) : AbstractKeyData {
     override fun compute(params: KeyboardParams, isPopup: Boolean): KeyData? {
-        val selected = (if (params.mId.deshHindiVowelDiacriticMode) active else default).compute(params, isPopup)
-            ?: return null
-        if (!params.mId.deshHindiVowelDiacriticMode || params.mId.deshHindiVowelPrefix.isEmpty() || isPopup) {
-            return selected
-        }
-        // Desh's native-letter vowel keys render the current consonant/syllable prefix
-        // together with the dependent-vowel form (e.g. क + ि => "कि"). The key code
-        // remains the matra/special code; only the visual label changes.
-        val renderedLabel = if (selected.code == helium314.keyboard.keyboard.internal.keyboard_parser.floris.KeyCode.DESH_NO_INPUT_VOWEL) {
-            params.mId.deshHindiVowelPrefix
-        } else {
-            params.mId.deshHindiVowelPrefix + selected.label
-        }
-        if (renderedLabel == selected.label) return selected
-        return selected.copy(newLabel = renderedLabel)
+        val syllable = params.mId.deshHindiActiveSyllable
+        if (syllable == null)
+            return default.compute(params)
+        val activeData = active.compute(params, isPopup) ?: return null
+        // Desh builds the label as F + key code point; the inserted character stays
+        // the matra. Reproduce exactly that: label = syllable + matra, code = matra.
+        // For the no-input-vowel key (Desh code -28), the smali skips appending the
+        // code point, so its label is just the syllable itself (क), not क + अ.
+        if (activeData.code == KeyCode.DESH_NO_INPUT_VOWEL)
+            return activeData.copy(newLabel = syllable)
+        return activeData.copy(
+            newLabel = syllable + activeData.label,
+            newCode = if (activeData.code == KeyCode.UNSPECIFIED) activeData.label.codePointAt(0) else activeData.code
+        )
     }
 
     override fun asString(isForDisplay: Boolean): String = ""

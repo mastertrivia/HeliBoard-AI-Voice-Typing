@@ -46,7 +46,7 @@ fun DeshNativeWordsScreen(
         onClickBack = onClickBack,
         title = { Text(stringResource(R.string.desh_native_words_title)) },
         filteredItems = { term ->
-            if (term.isBlank()) words.toList()
+            if (term.isBlank()) words
             else words.filter { it.first.contains(term, true) || it.second.contains(term, true) }
         },
         itemContent = { (word, value) ->

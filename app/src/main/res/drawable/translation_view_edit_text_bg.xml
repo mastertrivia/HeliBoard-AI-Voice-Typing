@@ -5,4 +5,9 @@
     android:shape="rectangle">
     <corners android:radius="20dp" />
     <solid android:color="#FFFFFF" />
+    <!-- Desh: 1dp outlineVariant stroke. foreground_weak is the HeliBoard neutral,
+         visible on light fills, subtle on dark fills (matches outlineVariant intent). -->
+    <stroke
+        android:width="1dp"
+        android:color="@color/foreground_weak" />
 </shape>

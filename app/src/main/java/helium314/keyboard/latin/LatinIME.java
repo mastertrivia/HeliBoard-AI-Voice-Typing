@@ -103,6 +103,7 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
@@ -163,12 +164,13 @@ public class LatinIME extends InputMethodService implements
 
     private RichInputMethodManager mRichImm;
     /**
-     * Whether the dedicated "देश हिंदी keyboard" should display vowel diacritics
-     * (matras) instead of independent vowels. This is deliberately kept outside
-     * SettingsValues because it follows the text immediately before the cursor.
+     * The active Desh Hindi syllable (Desh's fe.f.F) while the dedicated
+     * "देश हिंदी keyboard" displays vowel diacritics (matras) instead of
+     * independent vowels. Null when no syllable is active — the vowel keys then
+     * show their standalone forms. This is deliberately kept outside SettingsValues
+     * because it follows the text immediately before the cursor.
      */
-    private boolean mDeshHindiVowelDiacriticMode = false;
-    private String mDeshHindiVowelPrefix = "";
+    private String mDeshHindiActiveSyllable = null;
 
     final KeyboardSwitcher mKeyboardSwitcher;
     private final SubtypeState mSubtypeState = new SubtypeState((InputMethodSubtype subtype) -> { switchToSubtype(subtype); return Unit.INSTANCE; });
@@ -844,9 +846,12 @@ public class LatinIME extends InputMethodService implements
             mDeshTranslationEngine = new DeshTranslationEngine(this, new DeshTranslationHost() {
                 @Override public InputConnection getInputConnection() { return getCurrentInputConnection(); }
                 @Override public android.os.IBinder inputViewWindowToken() {
-                    return (getWindow() != null && getWindow().getWindow() != null
-                            && getWindow().getWindow().getDecorView() != null)
-                            ? getWindow().getWindow().getDecorView().getWindowToken() : null;
+                    // InputMethodService.getWindow() returns the IME Dialog; its decor view lives
+                    // on Dialog.getWindow() (a Window). Java field syntax cannot see Kotlin's
+                    // private backing field, so this uses the Window API directly.
+                    final android.app.Dialog dialog = getWindow();
+                    final android.view.Window w = dialog == null ? null : dialog.getWindow();
+                    return (w != null && w.getDecorView() != null) ? w.getDecorView().getWindowToken() : null;
                 }
                 @Override public String currentLanguageCode() {
                     return mRichImm.getCurrentSubtypeLocale().getLanguage();
@@ -905,7 +910,7 @@ public class LatinIME extends InputMethodService implements
         mStatsUtilsManager.onStartInputView();
         if (mDeshHindiComposer != null)
             mDeshHindiComposer.reset();
-        mDeshHindiVowelDiacriticMode = false;
+        mDeshHindiActiveSyllable = null;
     }
 
     @Override
@@ -932,12 +937,8 @@ public class LatinIME extends InputMethodService implements
         BackgroundGatheringCache.saveOrClear(this);
     }
 
-    public boolean isDeshHindiVowelDiacriticMode() {
-        return mDeshHindiVowelDiacriticMode;
-    }
-
-    public String getDeshHindiVowelPrefix() {
-        return mDeshHindiVowelPrefix;
+    public String getDeshHindiActiveSyllable() {
+        return mDeshHindiActiveSyllable;
     }
 
     private boolean isDeshHindiSubtype() {
@@ -947,44 +948,36 @@ public class LatinIME extends InputMethodService implements
 
     /**
      * Desh-style Hindi switches the vowel keys to matras immediately after a
-     * consonant. We derive the state from the actual text before the cursor so
-     * backspace, cursor movement, paste and autocorrection all stay coherent.
-     * The predicate matches Desh's own syllable set (lb/b.java): the longest
-     * suffix of the text before the cursor that is a valid syllable.
+     * consonant. The isolated composer owns the current syllable synchronously,
+     * so it is consulted first — deriving the state from the editor text alone
+     * raced with the asynchronous setComposingText round-trip and kept the vowel
+     * keys permanently standalone. When no syllable is being composed (cursor
+     * moved, paste, opening an existing word), we fall back to Desh's own
+     * predicate on the text before the cursor (fe/f.d -> fe/f.F in lb/b.java).
+     * The returned string is the syllable itself, which the keyboard renders as
+     * syllable + matra labels — exactly like Desh's fe/f.F state.
      */
-    private boolean computeDeshHindiVowelDiacriticMode() {
+    private String computeDeshHindiActiveSyllable() {
         if (!isDeshHindiSubtype())
-            return false;
+            return null;
+        if (mDeshHindiComposer != null && mDeshHindiComposer.hasActiveSyllable())
+            return mDeshHindiComposer.getActiveSyllable();
         try {
             final CharSequence beforeCursor = mInputLogic.mConnection.getTextBeforeCursor(
                     DeshInputEngine.SYLLABLE_WINDOW, 0);
-            return !DeshInputEngine.findVowelDisplayPrefix(beforeCursor).isEmpty();
+            return DeshInputEngine.INSTANCE.findDeshHindiSyllable(beforeCursor);
         } catch (Throwable t) {
             // Never let contextual key rendering break the IME if an editor rejects the query.
-            return false;
-        }
-    }
-
-    private String computeDeshHindiVowelPrefix() {
-        if (!isDeshHindiSubtype())
-            return "";
-        try {
-            final CharSequence beforeCursor = mInputLogic.mConnection.getTextBeforeCursor(
-                    DeshInputEngine.SYLLABLE_WINDOW, 0);
-            return DeshInputEngine.findVowelDisplayPrefix(beforeCursor);
-        } catch (Throwable t) {
-            return "";
+            return null;
         }
     }
 
     private void updateDeshHindiVowelDiacriticMode(final boolean reloadIfChanged) {
-        final boolean newMode = computeDeshHindiVowelDiacriticMode();
-        final String newPrefix = computeDeshHindiVowelPrefix();
-        final boolean changed = newMode != mDeshHindiVowelDiacriticMode
-                || !newPrefix.equals(mDeshHindiVowelPrefix);
-        mDeshHindiVowelDiacriticMode = newMode;
-        mDeshHindiVowelPrefix = newPrefix;
-        if (changed && reloadIfChanged && mKeyboardSwitcher.getMainKeyboardView() != null)
+        final String newSyllable = computeDeshHindiActiveSyllable();
+        if (Objects.equals(newSyllable, mDeshHindiActiveSyllable))
+            return;
+        mDeshHindiActiveSyllable = newSyllable;
+        if (reloadIfChanged && mKeyboardSwitcher.getMainKeyboardView() != null)
             mHandler.post(mKeyboardSwitcher::reloadMainKeyboard);
     }
 
@@ -1015,7 +1008,7 @@ public class LatinIME extends InputMethodService implements
             if (voiceLocale != null)
                 mVoiceEngine.setLanguage(voiceLocale.toLanguageTag());
         }
-        mDeshHindiVowelDiacriticMode = computeDeshHindiVowelDiacriticMode();
+        mDeshHindiActiveSyllable = computeDeshHindiActiveSyllable();
         loadKeyboard();
         if (hasSuggestionStripView()) {
             mSuggestionStripView.setRtl(mRichImm.getCurrentSubtype().isRtlSubtype());
@@ -1053,7 +1046,7 @@ public class LatinIME extends InputMethodService implements
         // also wouldn't be consuming gesture data.
         mGestureConsumer = GestureConsumer.NULL_GESTURE_CONSUMER;
         mRichImm.refreshSubtypeCaches();
-        mDeshHindiVowelDiacriticMode = computeDeshHindiVowelDiacriticMode();
+        mDeshHindiActiveSyllable = computeDeshHindiActiveSyllable();
         final KeyboardSwitcher switcher = mKeyboardSwitcher;
 
         // If we are starting input in a different text field from before, we'll have to reload
@@ -1609,6 +1602,13 @@ public class LatinIME extends InputMethodService implements
     // Implementation of {@link SuggestionStripView.Listener}.
     @Override
     public void onCodeInput(final int codePoint, final int x, final int y, final boolean isKeyRepeat) {
+        // While the Desh translation panel is open, every typed character goes into the
+        // panel's text box (Desh routes keys into its KeyboardEditText). Without this,
+        // letters bypass the box entirely and land in the app behind the keyboard.
+        if (mDeshTranslationView != null && mDeshTranslationView.isOpen()
+                && mDeshTranslationView.handleKeyCode(codePoint)) {
+            return;
+        }
         mKeyboardActionListener.onCodeInput(codePoint, x, y, isKeyRepeat);
     }
 
@@ -1680,10 +1680,14 @@ public class LatinIME extends InputMethodService implements
     private void resetDeshHindiVowelDiacriticMode() {
         if (!isDeshHindiSubtype())
             return;
-        if (!mDeshHindiVowelDiacriticMode)
+        if (mDeshHindiActiveSyllable == null)
             return;
-        mDeshHindiVowelDiacriticMode = false;
-        mDeshHindiVowelPrefix = "";
+        // Desh's no-input-vowel key (अ while matras are shown) forces the syllable
+        // state to empty — commit any pending composition so the vowel keys return
+        // to their standalone forms and stay there.
+        if (mDeshHindiComposer != null)
+            mDeshHindiComposer.commitPending();
+        mDeshHindiActiveSyllable = null;
         if (mKeyboardSwitcher.getMainKeyboardView() != null)
             mHandler.post(mKeyboardSwitcher::reloadMainKeyboard);
     }
@@ -1702,6 +1706,12 @@ public class LatinIME extends InputMethodService implements
 
     public void onTextInput(@Nullable String rawText) {
         if (rawText == null) return;
+        // Multi-codepoint text (conjunct keys, emoji) also belongs in the translation
+        // box while the panel is open.
+        if (mDeshTranslationView != null && mDeshTranslationView.isOpen()
+                && mDeshTranslationView.handleText(rawText)) {
+            return;
+        }
         if (mAiVoiceSessionController != null)
             mAiVoiceSessionController.onInputInteraction();
         // Isolated Desh Hindi input layer — multi-codepoint keys (क्ष, क़, …).

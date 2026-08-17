@@ -77,9 +77,11 @@ class Suggest(private val mDictionaryFacilitator: DictionaryFacilitator) {
         val typedWordString = wordComposer.typedWord
         val resultsArePredictions = !wordComposer.isComposingWord
         val isDeshEnglishSubtype = DeshInputEngine.isDeshEnglishSubtype(keyboard.mId.subtype.mainLayoutName)
-        val isHindiLocale = keyboard.mId.subtype.locale.language == "hi"
         val deshResults = when {
-            isHindiLocale -> {
+            // The Desh Hindi vocabulary serves every Devanagari Hindi subtype — HeliBoard
+            // ships no Hindi .dict, so this is the only Hindi dictionary source. Hinglish
+            // (hi-Latn) is excluded: it is Latin-script and must keep the HeliBoard path.
+            DeshInputEngine.isHindiDevanagariSubtype(keyboard.mId.subtype.mainLayoutName) -> {
                 val words = DeshHindiPredictor.getSuggestions(
                     typedWordString, ngramContext, typedWordString.isEmpty()
                 )
@@ -90,16 +92,18 @@ class Suggest(private val mDictionaryFacilitator: DictionaryFacilitator) {
                 // word is merged at Integer.MAX_VALUE (Desh's usernativewords/a.a() result,
                 // kind USER_NATIVE_WORD, in NativeTypedWordSuggestionsTask), so it always
                 // outranks the native suggestions. No automatic learning — matching Desh.
-                if (results != null && typedWordString.isNotEmpty()
-                    && DeshInputEngine.isDeshHindiSubtype(keyboard.mId.subtype.mainLayoutName))
+                if (results != null && typedWordString.isNotEmpty())
                     DeshNativeWordStore.get(typedWordString)?.let {
+                        // DICTIONARY_DESH_USER_NATIVE marks Desh's USER_NATIVE_WORD kind
+                        // (usernativewords/a.a). The suggestion strip renders words from
+                        // this dict in italic, exactly like Desh's CandidateView.
                         results.add(
                             SuggestedWordInfo(
                                 typedWordString,
                                 ngramContext.extractPrevWordsContext(),
                                 SuggestedWordInfo.MAX_SCORE,
                                 SuggestedWordInfo.KIND_COMPLETION,
-                                Dictionary.DICTIONARY_USER_TYPED,
+                                Dictionary.DICTIONARY_DESH_USER_NATIVE,
                                 SuggestedWordInfo.NOT_AN_INDEX,
                                 SuggestedWordInfo.NOT_A_CONFIDENCE
                             )

@@ -63,7 +63,8 @@ class DeshTranslationEngine(
     /** a.e — whether the target editor already has text (translation gets a leading space). */
     var addSpaceToTranslation = false
 
-    /** Tracks the last committed translation so clearing the box removes it (jg/e semantics). */
+    /** Desh's commit buffer (jg/e.c StringBuilder): the last text committed into the editor,
+     *  used by the diff-commit (jg/e.s) to replace it with the next translation. */
     private var committedTranslation = ""
 
     /** Desh MAX_TEXT_LENGTH-equivalent — the built URL length check (a.smali c()). */
@@ -120,6 +121,9 @@ class DeshTranslationEngine(
     /** Desh's success parse (l0/h1.smali): Gson String[][] → [0][0] is the translated text. */
     private fun parseResponse(body: String): DeshTranslationState {
         return try {
+            // JsonArray implements List<JsonElement>, so getOrNull(0) resolves via the
+            // kotlin.collections auto-import — no explicit import is needed (and the
+            // kotlinx.serialization.json.getOrNull symbol does not exist in 1.11.0).
             val root = Json.parseToJsonElement(body) as? JsonArray ?: return DeshTranslationState.Error("")
             val firstSentence = root.getOrNull(0) as? JsonArray ?: return DeshTranslationState.Error("")
             val translated = (firstSentence.getOrNull(0) as? JsonPrimitive)?.content
@@ -133,6 +137,8 @@ class DeshTranslationEngine(
     // ------------------------------------------------------------------
     // State — a.i(f): store + render
     // ------------------------------------------------------------------
+    // renamed from setState: the `state` property's JVM setter clashes with a method of that name.
+    // view?.setState(...) below is the View's own method and is intentionally kept.
     fun updateState(newState: DeshTranslationState) {
         state = newState
         view?.setState(newState)
@@ -184,6 +190,8 @@ class DeshTranslationEngine(
     fun show() {
         val v = view ?: return
         v.visibility = android.view.View.VISIBLE
+        // Re-tint from the current theme every open (theme may have changed since init).
+        v.applyThemeColors()
         updateState(DeshTranslationState.Init)
         v.initUi()
         val et = v.editText
@@ -193,10 +201,11 @@ class DeshTranslationEngine(
         v.attachTextWatcher()
         v.typedTextMarker = ""
         v.showLanguageRow(showLanguageRow = true)
-        // a.l(): compute e — whether the editor already contains text (prepend a space later)
+        // a.l(): compute e — whether the editor already contains text (prepend a space later).
+        // Desh checks exactly ONE character before the cursor (jg/e.p(1)) and only ' ' (0x20).
         val ic = host.getInputConnection()
-        val beforeCursor = ic?.getTextBeforeCursor(200, 0)?.toString().orEmpty()
-        addSpaceToTranslation = beforeCursor.any { it != ' ' && it != '\n' }
+        val beforeCursor = ic?.getTextBeforeCursor(1, 0)?.toString().orEmpty()
+        addSpaceToTranslation = beforeCursor.isNotEmpty() && beforeCursor.last() != ' '
         updateState(DeshTranslationState.Idle)
         host.onTranslationVisibilityChanged(true)
     }
@@ -216,25 +225,52 @@ class DeshTranslationEngine(
     }
 
     // ------------------------------------------------------------------
-    // Committing translated text into the target editor (jg/e U.C)
+    // Committing translated text into the target editor — Desh jg/e.C(String) -> s(text, false)
     // ------------------------------------------------------------------
+    /** Faithful port of jg/e.s(CharSequence, false): diff the new translation against the
+     *  previously committed one, delete the differing suffix, commit only the new tail.
+     *  This is Desh's anti-duplication mechanism (keeps a common prefix, e.g. when the new
+     *  translation extends the old one). */
     fun commitTranslatedText(text: String) {
         val ic = host.getInputConnection() ?: return
         val finalText = if (addSpaceToTranslation && text.isNotEmpty()) " $text" else text
-        if (committedTranslation.isNotEmpty())
-            ic.deleteSurroundingText(committedTranslation.length, 0)
-        ic.commitText(finalText, 1)
+        val old = committedTranslation
+        val oldLen = old.length
+        val newLen = finalText.length
+        // common prefix — Desh Lav/a.c(C, C, false): equal or case-insensitively equal
+        var common = 0
+        while (common < oldLen && common < newLen && charsEqual(old[common], finalText[common]))
+            common++
+        // backtrack when the boundary would split a surrogate pair in either string (Lav/a0.A)
+        val last = common - 1
+        if (last >= 0 && (isHighSurrogateAt(old, last) || isHighSurrogateAt(finalText, last)))
+            common--
+        val deleteCount = oldLen - common
+        // Desh: cursorOffset = trackedCursor - oldLen. Right after a commit the cursor sits at
+        // oldLen; it cannot move while the panel owns the keys, so this is always 0 here.
+        val cursorOffset = 0
+        val tail = finalText.substring(common)
+        val needBatch = deleteCount > 0 || (cursorOffset > 0 && tail.isNotEmpty())
+        if (needBatch) ic.beginBatchEdit()
+        if (deleteCount > 0 || cursorOffset > 0)
+            ic.deleteSurroundingText(deleteCount, cursorOffset)
+        if (tail.isNotEmpty())
+            ic.commitText(tail, 1)
         committedTranslation = finalText
+        if (needBatch) ic.endBatchEdit()
     }
 
+    /** Lav/a.c(CCZ) with ignoreCase=false — equal or case-insensitively equal chars. */
+    private fun charsEqual(a: Char, b: Char): Boolean =
+        a == b || Character.toUpperCase(a) == Character.toUpperCase(b)
+                || Character.toLowerCase(a) == Character.toLowerCase(b)
+
+    /** Lav/a0.A(CharSequence, I) — true when index splits a surrogate pair. */
+    private fun isHighSurrogateAt(s: String, i: Int): Boolean =
+        i >= 0 && i <= s.length - 2 && Character.isHighSurrogate(s[i]) && Character.isLowSurrogate(s[i + 1])
+
     /** a.c("") — clearing the box removes the previously committed translation. */
-    private fun clearCommittedTranslation() {
-        val ic = host.getInputConnection() ?: return
-        if (committedTranslation.isNotEmpty()) {
-            ic.deleteSurroundingText(committedTranslation.length, 0)
-            committedTranslation = ""
-        }
-    }
+    private fun clearCommittedTranslation() = commitTranslatedText("")
 
     // ------------------------------------------------------------------
     // Language picker — a.k(Z)

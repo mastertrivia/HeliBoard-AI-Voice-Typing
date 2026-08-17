@@ -29,8 +29,13 @@ data class KeyboardId(
     val deviceLocked: Boolean,
     val numberRowEnabled: Boolean,
     val numberRowInSymbols: Boolean,
-    val deshHindiVowelDiacriticMode: Boolean,
-    val deshHindiVowelPrefix: String,
+    /**
+     * The active Desh Hindi syllable (e.g. "क") used to compose vowel-key labels
+     * (Desh's fe.f.F state). Null when no syllable is active — the vowel keys then
+     * show their standalone forms (अ आ इ …). Mirrors Desh: keyboard state reloads
+     * whenever the syllable changes, so labels re-render as consonant + matra.
+     */
+    val deshHindiActiveSyllable: String?,
     val languageSwitchKeyEnabled: Boolean,
     val emojiKeyEnabled: Boolean,
     val customActionLabel: String?,
@@ -54,8 +59,7 @@ data class KeyboardId(
         params.deviceLocked,
         params.numberRowEnabled,
         params.numberRowInSymbols,
-        params.deshHindiVowelDiacriticMode,
-        params.deshHindiVowelPrefix,
+        params.deshHindiActiveSyllable,
         params.languageSwitchKeyEnabled,
         params.emojiKeyEnabled,
         params.editorInfo.actionLabel?.toString(),
