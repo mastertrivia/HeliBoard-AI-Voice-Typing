@@ -13,7 +13,11 @@ import helium314.keyboard.latin.utils.Log
  */
 object DeshHindiPredictor {
     private const val TAG = "DeshHindiPredictor"
-    private const val MAX_RESULTS = 12
+    // Exact Desh result counts from NativePredictor.smali: the completion path
+    // (f() -> nativeLayoutPrefixSearch) passes const/16 0xd = 13, the next-word
+    // path (c() -> getNextWords) passes const/16 0x8 = 8.
+    private const val MAX_COMPLETION_RESULTS = 13
+    private const val MAX_NEXT_WORD_RESULTS = 8
     private const val WORDS_ASSET = DeshHindiDictionaryInfo.ASSET
     private const val LM_ASSET = DeshHindiDictionaryInfo.LANGUAGE_MODEL_ASSET
 
@@ -84,15 +88,15 @@ object DeshHindiPredictor {
             val previous = context.extractPrevWordsContextArray()
             val result = if (forNextWord) {
                 com.deshkeyboard.suggestions.nativesuggestions.nativepredictor.NativePredictor
-                    .getNextWords(handle, previous, MAX_RESULTS)
+                    .getNextWords(handle, previous, MAX_NEXT_WORD_RESULTS)
             } else {
                 com.deshkeyboard.suggestions.nativesuggestions.nativepredictor.NativePredictor
                     .nativeLayoutPrefixSearch(
-                        handle, previous, typedWord, MAX_RESULTS,
+                        handle, previous, typedWord, MAX_COMPLETION_RESULTS,
                         context.isBeginningOfSentenceContext()
                     )
             }
-            result?.filter { it.isNotBlank() }?.distinct()?.take(MAX_RESULTS)
+            result?.filter { it.isNotBlank() }?.distinct()?.take(MAX_COMPLETION_RESULTS)
         } catch (t: Throwable) {
             Log.e(TAG, "Desh predictor call failed; falling back to HeliBoard", t)
             available = false

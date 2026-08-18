@@ -199,6 +199,15 @@ fun String.splitOnFirstSpacesOnly(): List<String> {
     return out
 }
 
+/**
+ * True when the text is a Latin-script (Hinglish) typed word: contains at least
+ * one ASCII letter and no Devanagari characters. Used to gate the Desh
+ * transliteration engine, which maps Latin input to Devanagari candidates.
+ */
+fun String.isLatinScript(): Boolean =
+    any { it in 'a'..'z' || it in 'A'..'Z' } &&
+        none { it.code in 0x0900..0x097F }
+
 fun CharSequence.isValidNumber(): Boolean {
     return this.toString().toDoubleOrNull() != null
 }

@@ -1,12 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Ported from Desh Keyboard v17.4.9 — translation_language_select_dialog.xml.
      CardView is not a HeliBoard dependency, so the same structure (centered card,
-     bold title, language list) is reproduced with a rounded background drawable. -->
+     bold title, language list) is reproduced with a rounded background drawable.
+     The language list now carries Desh's FastScrollerView (60dp, layout_gravity=end)
+     exactly like the original. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@android:color/transparent"
-    android:padding="24dp">
+    android:paddingLeft="20dp"
+    android:paddingTop="100dp"
+    android:paddingRight="20dp"
+    android:paddingBottom="100dp">
 
     <LinearLayout
         android:id="@+id/dialog_card"
@@ -25,10 +30,22 @@
             android:textSize="22sp"
             android:textStyle="bold" />
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/language_list"
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="420dp"
-            android:scrollbars="none" />
+            android:layout_height="420dp">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/language_list"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scrollbars="none" />
+
+            <!-- Desh FastScrollerView: 60dp, end-gravity, fill_parent height -->
+            <helium314.keyboard.latin.translation.DeshFastScrollerView
+                android:id="@+id/fast_scroller"
+                android:layout_width="60dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="end" />
+        </FrameLayout>
     </LinearLayout>
 </FrameLayout>

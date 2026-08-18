@@ -1,41 +1,24 @@
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$zip = [System.IO.Compression.ZipFile]::OpenRead('D:\heliboard new\desh_v5.zip')
-$entries = $zip.Entries | ForEach-Object { $_.FullName }
-$checks = @(
-  'app\src\main\java\helium314\keyboard\latin\translation\DeshTranslationEngine.kt',
-  'app\src\main\java\helium314\keyboard\latin\translation\DeshTranslationView.kt',
-  'app\src\main\java\helium314\keyboard\latin\translation\DeshTranslationState.kt',
-  'app\src\main\java\helium314\keyboard\latin\translation\DeshTranslationRequest.kt',
-  'app\src\main\java\helium314\keyboard\latin\translation\DeshTranslationLanguage.kt',
-  'app\src\main\java\helium314\keyboard\latin\LatinIME.java',
-  'app\src\main\res\layout\translation_view_panel.xml',
-  'app\src\main\res\layout\translation_language_select_dialog.xml',
-  'app\src\main\res\layout\translation_language_item.xml',
-  'app\src\main\res\layout\translation_language_item_header.xml',
-  'app\src\main\res\layout\main_keyboard_frame.xml',
-  'app\src\main\res\drawable\ic_no_internet.xml',
-  'app\src\main\res\drawable\ic_unknown_error.xml',
-  'app\src\main\res\drawable\ic_translate_language_switch.xml',
-  'app\src\main\res\drawable\translation_language_name_bg.xml',
-  'app\src\main\res\drawable\secondary_button_background_rounded.xml',
-  'app\src\main\res\drawable\translation_view_edit_text_bg.xml',
-  'app\src\main\res\drawable\translation_dialog_card_bg.xml',
-  'app\src\main\res\drawable\cursor_drawable_with_primary_text_color.xml',
-  'app\src\main\res\values\strings.xml'
-)
-$all = 0
-foreach ($c in $checks) {
-  if ($entries -contains $c) { $all++ } else { Write-Host "MISSING $c" }
-}
-Write-Host "present: $all / $($checks.Count)"
-# content spot checks
-$e = $zip.GetEntry('app\src\main\java\helium314\keyboard\latin\translation\DeshTranslationRequest.kt')
-$r = New-Object System.IO.StreamReader($e.Open())
-$content = $r.ReadToEnd(); $r.Close()
-Write-Host "mainHandler fix in zip: $($content.Contains('mainHandler'))"
-$e2 = $zip.GetEntry('app\src\main\res\layout\translation_view_panel.xml')
-$r2 = New-Object System.IO.StreamReader($e2.Open())
-$panel = $r2.ReadToEnd(); $r2.Close()
-Write-Host "panel has NO mic/speak: $(-not ($panel -match 'mic|speak'))"
-Write-Host "panel has etTranslate: $($panel.Contains('etTranslate'))"
-$zip.Dispose()
+$z = [System.IO.Compression.ZipFile]::OpenRead('D:\heliboard new\heliboard-fixed-17aug2026.zip')
+$names = $z.Entries | ForEach-Object { $_.FullName }
+$z.Dispose()
+
+Write-Output "=== total entries: $($names.Count) ==="
+Write-Output "=== build essentials ==="
+$names | Where-Object { $_ -match '^(settings.gradle|build.gradle.kts|gradlew.bat|gradle/wrapper/gradle-wrapper.properties|.github/workflows/build.yml|app/build.gradle.kts)$' }
+
+Write-Output "=== NEW layout profiles present? ==="
+$names | Where-Object { $_ -match 'symbols_new|symbols_shifted_new|number_row.json' }
+
+Write-Output "=== APKs present (should be NONE)? ==="
+($names | Where-Object { $_ -match '\.apk$' }).Count
+
+Write-Output "=== local.properties present (should be NONE)? ==="
+($names | Where-Object { $_ -match 'local.properties$' }).Count
+
+Write-Output "=== desh predictor assets present (required)? ==="
+$names | Where-Object { $_ -match 'assets/desh_predictor/' } | Select-Object -First 6
+
+Write-Output "=== strings.xml contains NEW profile names? ==="
+$matches = $names | Where-Object { $_ -match 'values/strings.xml$' }
+Write-Output "strings.xml entries: $($matches.Count)"

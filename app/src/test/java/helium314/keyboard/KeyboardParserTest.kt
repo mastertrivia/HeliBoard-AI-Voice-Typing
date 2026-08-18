@@ -527,6 +527,17 @@ f""", // no newline at the end
         assertEquals("क", composed[2].mLabel)
         assertEquals(KeyCode.DESH_NO_INPUT_VOWEL, composed[2].mCode)
 
+        // Typography: the composed labels must keep the letter-ratio flag, exactly
+        // like Desh renders every vowel key at the standard letter size. Without it,
+        // Key.selectTextSize's default branch would pick mLabelSize (small) for any
+        // 2+ code-point label like का. Check all three composed keys here.
+        composed.forEach { kp ->
+            assertEquals(
+                0x80, kp.mLabelFlags and 0x1C0,
+                "composed label '${kp.mLabel}' must carry LABEL_FLAGS_FOLLOW_KEY_LETTER_RATIO"
+            )
+        }
+
         // Active conjunct syllable क्ष: क्षा / क्षी (conjunct + matra).
         params.mId = params.mId.copy(deshHindiActiveSyllable = "क्ष")
         val conjunct = LayoutParser.parseJsonString(json)
@@ -534,6 +545,53 @@ f""", // no newline at the end
         assertEquals("क्षा", conjunct[0].mLabel)
         assertEquals("क्षी", conjunct[1].mLabel)
         assertEquals("क्ष", conjunct[2].mLabel)
+    }
+
+    @Test fun deshHindiComposedVowelKeysKeepLetterSize() {
+        // Regression test for the vowel-label shrink: Desh renders every vowel key at
+        // the standard letter size even when the composed label has 2+ code points
+        // (का कि की कु कू के कै को कौ कृ, and conjunct forms like क्षा). The root
+        // cause was Key.selectTextSize's default branch sizing by code-point count;
+        // the selector must carry the letter-ratio flag over the composed label.
+        val content = File("src/main/assets/layouts/main/desh_hindi.json").readText()
+        val ratioMask = 0x1C0
+        val letterRatioFlag = 0x80 // Key.LABEL_FLAGS_FOLLOW_KEY_LETTER_RATIO
+
+        // (a) standalone keys keep their original flags (ज्ञ/क्ष = 0x80 already,
+        //     single letters stay on the default branch; श्र is only a popup on श).
+        params.mId = params.mId.copy(deshHindiActiveSyllable = null)
+        val keys = LayoutParser.parseJsonString(content)
+            .flatten().mapNotNull { it.compute(params)?.toKeyParams(params) }
+        val standaloneByLabel = keys.associateBy { it.mLabel ?: "" }
+        for (lbl in listOf("ज्ञ", "क्ष"))
+            assertEquals(letterRatioFlag, standaloneByLabel.getValue(lbl).mLabelFlags and ratioMask,
+                "standalone '$lbl' must keep letter-ratio flag")
+
+        // (b) with an active syllable, every row-1 vowel key must carry the
+        //     letter-ratio flag -> renders at mLetterSize like Desh.
+        params.mId = params.mId.copy(deshHindiActiveSyllable = "क")
+        val composed = LayoutParser.parseJsonString(content)
+            .flatten().mapNotNull { it.compute(params)?.toKeyParams(params) }
+        val composedVowelLabels = listOf("का", "कि", "की", "कु", "कू", "के", "कै", "को", "कौ", "कृ")
+        val composedByLabel = composed.associateBy { it.mLabel ?: "" }
+        composedVowelLabels.forEach { lbl ->
+            val kp = composedByLabel[lbl]
+                ?: error("composed label '$lbl' not found in parsed layout")
+            assertEquals(letterRatioFlag, kp.mLabelFlags and ratioMask,
+                "composed '$lbl' must keep letter size")
+        }
+
+        // (c) conjunct syllable क्ष composes the same way (क्षा / क्षी).
+        params.mId = params.mId.copy(deshHindiActiveSyllable = "क्ष")
+        val conjunct = LayoutParser.parseJsonString(content)
+            .flatten().mapNotNull { it.compute(params)?.toKeyParams(params) }
+        val conjunctByLabel = conjunct.associateBy { it.mLabel ?: "" }
+        for (lbl in listOf("क्षा", "क्षी", "क्षृ")) {
+            val kp = conjunctByLabel[lbl]
+                ?: error("composed label '$lbl' not found in parsed layout")
+            assertEquals(letterRatioFlag, kp.mLabelFlags and ratioMask,
+                "composed '$lbl' must keep letter size")
+        }
     }
 
     @Test fun parseExistingLayouts() {

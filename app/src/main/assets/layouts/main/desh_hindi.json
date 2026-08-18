@@ -131,15 +131,7 @@
         "popup": {
           "main": {
             "label": "ै"
-          },
-          "relevant": [
-            {
-              "label": "ऍ"
-            },
-            {
-              "label": "ॅ"
-            }
-          ]
+          }
         }
       },
       "active": {
@@ -147,15 +139,7 @@
         "popup": {
           "main": {
             "label": "ऐ"
-          },
-          "relevant": [
-            {
-              "label": "ऍ"
-            },
-            {
-              "label": "ॅ"
-            }
-          ]
+          }
         }
       }
     },
@@ -166,18 +150,7 @@
         "popup": {
           "main": {
             "label": "ो"
-          },
-          "relevant": [
-            {
-              "label": "ऑ"
-            },
-            {
-              "label": "ॉ"
-            },
-            {
-              "label": "ॐ"
-            }
-          ]
+          }
         }
       },
       "active": {
@@ -185,15 +158,7 @@
         "popup": {
           "main": {
             "label": "ओ"
-          },
-          "relevant": [
-            {
-              "label": "ऑ"
-            },
-            {
-              "label": "ॉ"
-            }
-          ]
+          }
         }
       }
     },
@@ -215,978 +180,6 @@
           }
         }
       }
-    }
-  ],
-  [
-    {
-      "label": "क",
-      "popup": {
-        "main": {
-          "label": "कं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "क्",
-            "labelFlags": 128
-          },
-          {
-            "label": "क़",
-            "labelFlags": 128
-          },
-          {
-            "label": "क़्",
-            "labelFlags": 128
-          },
-          {
-            "label": "क्र",
-            "labelFlags": 128
-          },
-          {
-            "label": "क्त",
-            "labelFlags": 128
-          },
-          {
-            "label": "क्ष",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "ख",
-      "popup": {
-        "main": {
-          "label": "खं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "ख्",
-            "labelFlags": 128
-          },
-          {
-            "label": "ख़",
-            "labelFlags": 128
-          },
-          {
-            "label": "ख़ं",
-            "labelFlags": 128
-          },
-          {
-            "label": "ख़्",
-            "labelFlags": 128
-          },
-          {
-            "label": "ख्य",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "ग",
-      "popup": {
-        "main": {
-          "label": "गं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "ग़",
-            "labelFlags": 128
-          },
-          {
-            "label": "ग्",
-            "labelFlags": 128
-          },
-          {
-            "label": "ग़्",
-            "labelFlags": 128
-          },
-          {
-            "label": "ग्र",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "घ",
-      "popup": {
-        "main": {
-          "label": "ङ"
-        },
-        "relevant": [
-          {
-            "label": "घं",
-            "labelFlags": 128
-          },
-          {
-            "label": "घ्",
-            "labelFlags": 128
-          },
-          {
-            "label": "घ्न",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "च",
-      "popup": {
-        "main": {
-          "label": "चं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "च्",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "छ",
-      "popup": {
-        "main": {
-          "label": "छं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "छ्",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "ज",
-      "popup": {
-        "main": {
-          "label": "जं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "ज़्",
-            "labelFlags": 128
-          },
-          {
-            "label": "ज़",
-            "labelFlags": 128
-          },
-          {
-            "label": "ज्",
-            "labelFlags": 128
-          },
-          {
-            "label": "ज़ं",
-            "labelFlags": 128
-          },
-          {
-            "label": "ज्ञ",
-            "labelFlags": 128
-          },
-          {
-            "label": "ज्य",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "झ",
-      "popup": {
-        "main": {
-          "label": "ञ"
-        },
-        "relevant": [
-          {
-            "label": "झं",
-            "labelFlags": 128
-          },
-          {
-            "label": "झ़्",
-            "labelFlags": 128
-          },
-          {
-            "label": "झ़",
-            "labelFlags": 128
-          },
-          {
-            "label": "झ्",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "ं"
-    },
-    {
-      "label": "ँ"
-    }
-  ],
-  [
-    {
-      "label": "ट",
-      "popup": {
-        "main": {
-          "label": "टं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "ट्",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "ठ",
-      "popup": {
-        "main": {
-          "label": "ठं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "ठ्",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "ड",
-      "popup": {
-        "main": {
-          "label": "डं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "ड़",
-            "labelFlags": 128
-          },
-          {
-            "label": "ड्",
-            "labelFlags": 128
-          },
-          {
-            "label": "ड़ं",
-            "labelFlags": 128
-          },
-          {
-            "label": "ङं",
-            "labelFlags": 128
-          },
-          {
-            "label": "ड़्",
-            "labelFlags": 128
-          },
-          {
-            "label": "ङ"
-          },
-          {
-            "label": "ङ्",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "ढ"
-    },
-    {
-      "label": "ण",
-      "popup": {
-        "main": {
-          "label": "णं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "ण्",
-            "labelFlags": 128
-          },
-          {
-            "label": "ण्ड",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "त",
-      "popup": {
-        "main": {
-          "label": "तं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "त्र",
-            "labelFlags": 128
-          },
-          {
-            "label": "त्",
-            "labelFlags": 128
-          },
-          {
-            "label": "त्त",
-            "labelFlags": 128
-          },
-          {
-            "label": "त्थ",
-            "labelFlags": 128
-          },
-          {
-            "label": "त्न",
-            "labelFlags": 128
-          },
-          {
-            "label": "त्म",
-            "labelFlags": 128
-          },
-          {
-            "label": "त्य",
-            "labelFlags": 128
-          },
-          {
-            "label": "त्व",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "थ",
-      "popup": {
-        "main": {
-          "label": "थं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "थ्",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "द",
-      "popup": {
-        "main": {
-          "label": "दं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "द्",
-            "labelFlags": 128
-          },
-          {
-            "label": "द्र",
-            "labelFlags": 128
-          },
-          {
-            "label": "द्द",
-            "labelFlags": 128
-          },
-          {
-            "label": "द्ध",
-            "labelFlags": 128
-          },
-          {
-            "label": "द्ब",
-            "labelFlags": 128
-          },
-          {
-            "label": "द्भ",
-            "labelFlags": 128
-          },
-          {
-            "label": "द्म",
-            "labelFlags": 128
-          },
-          {
-            "label": "द्व",
-            "labelFlags": 128
-          },
-          {
-            "label": "दृ",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "ध",
-      "popup": {
-        "main": {
-          "label": "धं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "ध्",
-            "labelFlags": 128
-          },
-          {
-            "label": "ध्र",
-            "labelFlags": 128
-          },
-          {
-            "label": "ध्य",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "न",
-      "popup": {
-        "main": {
-          "label": "नं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "न्",
-            "labelFlags": 128
-          },
-          {
-            "label": "न्ट",
-            "labelFlags": 128
-          },
-          {
-            "label": "न्त",
-            "labelFlags": 128
-          },
-          {
-            "label": "न्थ",
-            "labelFlags": 128
-          },
-          {
-            "label": "न्द",
-            "labelFlags": 128
-          },
-          {
-            "label": "न्न",
-            "labelFlags": 128
-          },
-          {
-            "label": "न्य",
-            "labelFlags": 128
-          },
-          {
-            "label": "न्ह",
-            "labelFlags": 128
-          }
-        ]
-      }
-    }
-  ],
-  [
-    {
-      "label": "प",
-      "popup": {
-        "main": {
-          "label": "पं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "प्",
-            "labelFlags": 128
-          },
-          {
-            "label": "प्र",
-            "labelFlags": 128
-          },
-          {
-            "label": "प्य",
-            "labelFlags": 128
-          },
-          {
-            "label": "प्त",
-            "labelFlags": 128
-          },
-          {
-            "label": "प्प",
-            "labelFlags": 128
-          },
-          {
-            "label": "प्ल",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "फ",
-      "popup": {
-        "main": {
-          "label": "फं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "फ्",
-            "labelFlags": 128
-          },
-          {
-            "label": "फ़",
-            "labelFlags": 128
-          },
-          {
-            "label": "फ़ं",
-            "labelFlags": 128
-          },
-          {
-            "label": "फ़्",
-            "labelFlags": 128
-          },
-          {
-            "label": "फ्र",
-            "labelFlags": 128
-          },
-          {
-            "label": "फ्त",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "ब",
-      "popup": {
-        "main": {
-          "label": "बं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "ब्",
-            "labelFlags": 128
-          },
-          {
-            "label": "ब्र",
-            "labelFlags": 128
-          },
-          {
-            "label": "ब्ज",
-            "labelFlags": 128
-          },
-          {
-            "label": "ब्द",
-            "labelFlags": 128
-          },
-          {
-            "label": "ब्ब",
-            "labelFlags": 128
-          },
-          {
-            "label": "ब्ल",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "भ",
-      "popup": {
-        "main": {
-          "label": "भं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "भ्",
-            "labelFlags": 128
-          },
-          {
-            "label": "भ्र",
-            "labelFlags": 128
-          },
-          {
-            "label": "भ्य",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "म",
-      "popup": {
-        "main": {
-          "label": "मं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "म्",
-            "labelFlags": 128
-          },
-          {
-            "label": "म्र",
-            "labelFlags": 128
-          },
-          {
-            "label": "म्च",
-            "labelFlags": 128
-          },
-          {
-            "label": "म्ट",
-            "labelFlags": 128
-          },
-          {
-            "label": "म्त",
-            "labelFlags": 128
-          },
-          {
-            "label": "म्प",
-            "labelFlags": 128
-          },
-          {
-            "label": "म्ब",
-            "labelFlags": 128
-          },
-          {
-            "label": "म्म",
-            "labelFlags": 128
-          },
-          {
-            "label": "म्य",
-            "labelFlags": 128
-          },
-          {
-            "label": "म्ह",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "य",
-      "popup": {
-        "main": {
-          "label": "यं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "य़्",
-            "labelFlags": 128
-          },
-          {
-            "label": "य़",
-            "labelFlags": 128
-          },
-          {
-            "label": "य्",
-            "labelFlags": 128
-          },
-          {
-            "label": "य़ं",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "र",
-      "popup": {
-        "main": {
-          "label": "रं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "्र",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्र",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्क",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्ग",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्च",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्ज",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्त",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्थ",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्द",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्न",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्म",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्श",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्ष",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्स",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्प",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्ट",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्ख",
-            "labelFlags": 128
-          },
-          {
-            "label": "र्य",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "ल",
-      "popup": {
-        "main": {
-          "label": "लं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "ल्",
-            "labelFlags": 128
-          },
-          {
-            "label": "ल्य",
-            "labelFlags": 128
-          },
-          {
-            "label": "ल्ट",
-            "labelFlags": 128
-          },
-          {
-            "label": "ल्प",
-            "labelFlags": 128
-          },
-          {
-            "label": "ल्ब",
-            "labelFlags": 128
-          },
-          {
-            "label": "ल्ह",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "व",
-      "popup": {
-        "main": {
-          "label": "वं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "व्",
-            "labelFlags": 128
-          },
-          {
-            "label": "व्र",
-            "labelFlags": 128
-          },
-          {
-            "label": "व्य",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "श",
-      "popup": {
-        "main": {
-          "label": "शं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "श्",
-            "labelFlags": 128
-          },
-          {
-            "label": "श्र",
-            "labelFlags": 128
-          },
-          {
-            "label": "श्च",
-            "labelFlags": 128
-          },
-          {
-            "label": "श्व",
-            "labelFlags": 128
-          }
-        ]
-      }
-    }
-  ],
-  [
-    {
-      "label": "ष",
-      "popup": {
-        "main": {
-          "label": "षं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "ष्",
-            "labelFlags": 128
-          },
-          {
-            "label": "ष्य",
-            "labelFlags": 128
-          },
-          {
-            "label": "ष्ट",
-            "labelFlags": 128
-          },
-          {
-            "label": "ष्ण",
-            "labelFlags": 128
-          },
-          {
-            "label": "ष्प",
-            "labelFlags": 128
-          },
-          {
-            "label": "ष्क",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "स",
-      "popup": {
-        "main": {
-          "label": "सं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "स्",
-            "labelFlags": 128
-          },
-          {
-            "label": "स्ट",
-            "labelFlags": 128
-          },
-          {
-            "label": "स्त",
-            "labelFlags": 128
-          },
-          {
-            "label": "स्र",
-            "labelFlags": 128
-          },
-          {
-            "label": "स्य",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "ह",
-      "popup": {
-        "main": {
-          "label": "हं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "ह्",
-            "labelFlags": 128
-          },
-          {
-            "label": "ह्म",
-            "labelFlags": 128
-          },
-          {
-            "label": "ह्र",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "ज्ञ",
-      "labelFlags": 128
-    },
-    {
-      "label": "क्ष",
-      "labelFlags": 128,
-      "popup": {
-        "main": {
-          "label": "क्षं",
-          "labelFlags": 128
-        },
-        "relevant": [
-          {
-            "label": "क्ष्",
-            "labelFlags": 128
-          }
-        ]
-      }
-    },
-    {
-      "label": "श्र",
-      "labelFlags": 128
     },
     {
       "$": "desh_hindi_vowel_selector",
@@ -1206,14 +199,179 @@
           }
         }
       }
+    }
+  ],
+  [
+    {
+      "label": "क"
     },
     {
-      "label": "ः",
+      "label": "ख"
+    },
+    {
+      "label": "ग"
+    },
+    {
+      "label": "घ",
       "popup": {
         "main": {
-          "label": "़"
+          "label": "ङ"
         }
       }
+    },
+    {
+      "label": "च"
+    },
+    {
+      "label": "छ"
+    },
+    {
+      "label": "ज"
+    },
+    {
+      "label": "झ",
+      "popup": {
+        "main": {
+          "label": "ञ"
+        }
+      }
+    },
+    {
+      "label": "ॐ"
+    },
+    {
+      "label": "ं"
+    },
+    {
+      "label": "ः"
+    }
+  ],
+  [
+    {
+      "label": "ट"
+    },
+    {
+      "label": "ठ"
+    },
+    {
+      "label": "ड",
+      "popup": {
+        "main": {
+          "label": "ड़"
+        }
+      }
+    },
+    {
+      "label": "ढ",
+      "popup": {
+        "main": {
+          "label": "ढ़"
+        }
+      }
+    },
+    {
+      "label": "ण"
+    },
+    {
+      "label": "त"
+    },
+    {
+      "label": "थ"
+    },
+    {
+      "label": "द",
+      "popup": {
+        "main": {
+          "label": "द्द",
+          "labelFlags": 128
+        }
+      }
+    },
+    {
+      "label": "ध",
+      "popup": {
+        "main": {
+          "label": "द्म",
+          "labelFlags": 128
+        }
+      }
+    },
+    {
+      "label": "न"
+    },
+    {
+      "label": "़"
+    }
+  ],
+  [
+    {
+      "label": "प",
+      "popup": {
+        "main": {
+          "label": "प्र",
+          "labelFlags": 128
+        }
+      }
+    },
+    {
+      "label": "फ"
+    },
+    {
+      "label": "ब"
+    },
+    {
+      "label": "भ"
+    },
+    {
+      "label": "म"
+    },
+    {
+      "label": "य"
+    },
+    {
+      "label": "र"
+    },
+    {
+      "label": "ल"
+    },
+    {
+      "label": "व"
+    },
+    {
+      "label": "श"
+    },
+    {
+      "label": "ँ"
+    }
+  ],
+  [
+    {
+      "label": "ष"
+    },
+    {
+      "label": "स"
+    },
+    {
+      "label": "ह"
+    },
+    {
+      "label": "क्ष",
+      "labelFlags": 128
+    },
+    {
+      "label": "त्र",
+      "labelFlags": 128
+    },
+    {
+      "label": "ज्ञ",
+      "labelFlags": 128
+    },
+    {
+      "label": "श्र",
+      "labelFlags": 128
+    },
+    {
+      "label": "ॅ"
     },
     {
       "label": "्"

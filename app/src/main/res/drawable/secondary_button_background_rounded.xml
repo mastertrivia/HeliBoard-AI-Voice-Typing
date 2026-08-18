@@ -1,7 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Oval button background (Desh secondary_button_background_rounded). White base,
-     tinted at runtime with the HeliBoard theme color. -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="oval">
-    <solid android:color="#FFFFFF" />
-</shape>
+<!-- Oval button background (Desh secondary_button_background_rounded, verbatim
+     structure): oval solid + ripple overlay + disabled state. White base so the
+     HeliBoard theme color filter (ColorType.TOOL_BAR_KEY_ENABLED_BACKGROUND) tints it.
+     Disabled fill is Desh's disabled_button_background_color (#ffd1d1d1). -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false">
+        <shape android:shape="oval">
+            <solid android:color="#FFD1D1D1" />
+        </shape>
+    </item>
+    <item>
+        <layer-list>
+            <item android:id="@android:id/background">
+                <shape android:shape="oval">
+                    <solid android:color="#FFFFFF" />
+                </shape>
+            </item>
+            <item>
+                <ripple android:color="#14000000">
+                    <item android:id="@android:id/mask">
+                        <shape android:shape="oval">
+                            <solid android:color="#FFFFFF" />
+                        </shape>
+                    </item>
+                </ripple>
+            </item>
+        </layer-list>
+    </item>
+</selector>

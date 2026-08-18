@@ -13,6 +13,7 @@ import android.view.inputmethod.SurroundingText
 import androidx.test.core.app.ApplicationProvider
 import helium314.keyboard.ShadowInputMethodManager2
 import helium314.keyboard.latin.App
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -35,6 +36,8 @@ class DeshTranslationTest {
     private lateinit var editor: FakeInputConnection
     private lateinit var engine: DeshTranslationEngine
     private lateinit var view: DeshTranslationView
+    private var sessionStarted = false
+    private var sessionEnded = false
 
     @Before
     fun setUp() {
@@ -45,6 +48,11 @@ class DeshTranslationTest {
             override fun inputViewWindowToken(): IBinder? = null
             override fun currentLanguageCode(): String = "hi"
             override fun onTranslationVisibilityChanged(visible: Boolean) {}
+            override fun onTranslationSessionStart() { sessionStarted = true }
+            override fun onTranslationSessionEnd() { sessionEnded = true }
+            override fun onTranslationSelectionChanged(oldStart: Int, oldEnd: Int, newStart: Int, newEnd: Int) {}
+            override fun onTranslationTextChanged() {}
+            override fun onTranslationSourceLanguageChanged(sourceCode: String) {}
         }
         engine = DeshTranslationEngine(context, host)
         view = DeshTranslationView(context)
@@ -208,6 +216,133 @@ class DeshTranslationTest {
     fun `source and target never hold the same language after swap`() {
         engine.swapLanguages()
         assertTrue(engine.source.code != engine.target.code)
+    }
+
+    // ------------------------------------------------------------------
+    // Input session — Desh bg/g.p0 (box InputConnection + host state swap)
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `show starts the IME input session and hide ends it`() {
+        sessionStarted = false
+        sessionEnded = false
+        engine.show()
+        assertTrue(sessionStarted)
+        assertFalse(sessionEnded)
+        engine.hide(true)
+        assertTrue(sessionEnded)
+    }
+
+    @Test
+    fun `box is the Desh KeyboardEditText and never enables suggestions`() {
+        val box = view.editText
+        assertTrue(box is DeshKeyboardEditText)
+        assertFalse(box.isSuggestionsEnabled)
+    }
+
+    @Test
+    fun `selection change in the box is reported back to the IME`() {
+        var reported = false
+        var reportedOld = intArrayOf(-1, -1)
+        var reportedNew = intArrayOf(-1, -1)
+        view.setSelectionCallback(object : DeshKeyboardEditTextCallback {
+            override fun onSelectionChanged(oldStart: Int, oldEnd: Int, newStart: Int, newEnd: Int) {
+                reported = true
+                reportedOld = intArrayOf(oldStart, oldEnd)
+                reportedNew = intArrayOf(newStart, newEnd)
+            }
+            override fun onTextSet(selectionStart: Int, selectionEnd: Int) {}
+        })
+        view.editText.setText("hello")
+        view.editText.setSelection(2)
+        assertTrue(reported)
+        assertArrayEquals(intArrayOf(0, 0), reportedOld)
+        assertArrayEquals(intArrayOf(2, 2), reportedNew)
+    }
+
+    @Test
+    fun `programmatic setText reports the composer-flush callback`() {
+        var reported = false
+        view.setSelectionCallback(object : DeshKeyboardEditTextCallback {
+            override fun onSelectionChanged(oldStart: Int, oldEnd: Int, newStart: Int, newEnd: Int) {}
+            override fun onTextSet(selectionStart: Int, selectionEnd: Int) { reported = true }
+        })
+        view.editText.setText("translated")
+        assertTrue(reported)
+    }
+
+    @Test
+    fun `keyboard switch is requested when the source language changes`() {
+        var requestedCode: String? = null
+        val host = object : DeshTranslationHost {
+            override fun getInputConnection(): InputConnection = editor
+            override fun inputViewWindowToken(): IBinder? = null
+            override fun currentLanguageCode(): String = "hi"
+            override fun onTranslationVisibilityChanged(visible: Boolean) {}
+            override fun onTranslationSessionStart() {}
+            override fun onTranslationSessionEnd() {}
+            override fun onTranslationSelectionChanged(oldStart: Int, oldEnd: Int, newStart: Int, newEnd: Int) {}
+            override fun onTranslationTextChanged() {}
+            override fun onTranslationSourceLanguageChanged(sourceCode: String) { requestedCode = sourceCode }
+        }
+        val engineWithHost = DeshTranslationEngine(
+            ApplicationProvider.getApplicationContext<App>(), host)
+        val v = DeshTranslationView(ApplicationProvider.getApplicationContext<App>())
+        v.engine = engineWithHost
+        engineWithHost.view = v
+        engineWithHost.show()
+        // pick a source language different from the default
+        val french = DeshTranslationLanguage.TABLE.firstOrNull { it.code == "fr" }
+            ?: DeshTranslationLanguage.ENGLISH
+        engineWithHost.onLanguageSelected(french, isSource = true)
+        assertEquals("fr", requestedCode)
+    }
+
+    @Test
+    fun `fast scroller scrolls the language list on drag`() {
+        val context = ApplicationProvider.getApplicationContext<App>()
+        val recycler = androidx.recyclerview.widget.RecyclerView(context)
+        recycler.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(context)
+        val languages = DeshTranslationLanguage.all().take(20)
+        recycler.adapter = object : androidx.recyclerview.widget.RecyclerView.Adapter<androidx.recyclerview.widget.RecyclerView.ViewHolder>() {
+            override fun getItemCount(): Int = languages.size
+            override fun onCreateViewHolder(
+                parent: android.view.ViewGroup, viewType: Int
+            ): androidx.recyclerview.widget.RecyclerView.ViewHolder {
+                val tv = android.widget.TextView(context)
+                tv.layoutParams = android.view.ViewGroup.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT, 100)
+                return object : androidx.recyclerview.widget.RecyclerView.ViewHolder(tv) {}
+            }
+            override fun onBindViewHolder(
+                holder: androidx.recyclerview.widget.RecyclerView.ViewHolder, position: Int
+            ) { (holder.itemView as android.widget.TextView).text = languages[position].name }
+        }
+        // measure + layout the list so scrolling actually moves positions
+        recycler.measure(
+            android.view.View.MeasureSpec.makeMeasureSpec(1000, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(1000, android.view.View.MeasureSpec.EXACTLY))
+        recycler.layout(0, 0, 1000, 1000)
+        val scroller = DeshFastScrollerView(context)
+        scroller.targetRecyclerView = recycler
+        // give the scroller a real size so the drag math works
+        scroller.measure(
+            android.view.View.MeasureSpec.makeMeasureSpec(60, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(1000, android.view.View.MeasureSpec.EXACTLY))
+        scroller.layout(0, 0, 60, 1000)
+        // drag near the bottom -> list scrolls to a later position
+        scroller.dispatchTouchEvent(
+            android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_DOWN, 30f, 990f, 0))
+        scroller.dispatchTouchEvent(
+            android.view.MotionEvent.obtain(0, 1, android.view.MotionEvent.ACTION_UP, 30f, 990f, 0))
+        val lm = recycler.layoutManager as androidx.recyclerview.widget.LinearLayoutManager
+        // scrollToPositionWithOffset schedules a layout pass; flush it explicitly in Robolectric
+        recycler.measure(
+            android.view.View.MeasureSpec.makeMeasureSpec(1000, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(1000, android.view.View.MeasureSpec.EXACTLY))
+        recycler.layout(0, 0, 1000, 1000)
+        val firstVisible = lm.findFirstVisibleItemPosition()
+        assertTrue("list should have scrolled to a later position (was $firstVisible)", firstVisible > 0)
     }
 }
 

@@ -73,6 +73,7 @@ import helium314.keyboard.latin.suggestions.SuggestionStripView;
 import helium314.keyboard.latin.suggestions.SuggestionStripViewAccessor;
 import helium314.keyboard.voice.SpeechNotesVoiceEngine;
 import helium314.keyboard.voice.VoiceSounds;
+import helium314.keyboard.latin.translation.DeshKeyboardEditText;
 import helium314.keyboard.latin.translation.DeshTranslationEngine;
 import helium314.keyboard.latin.translation.DeshTranslationHost;
 import helium314.keyboard.latin.translation.DeshTranslationView;
@@ -84,6 +85,7 @@ import helium314.keyboard.latin.utils.GestureDataGatheringKt;
 import helium314.keyboard.latin.utils.GestureDataGatheringSettings;
 import helium314.keyboard.latin.utils.InlineAutofillUtils;
 import helium314.keyboard.latin.utils.InputMethodPickerKt;
+import helium314.keyboard.latin.utils.SubtypeUtilsKt;
 import helium314.keyboard.latin.utils.JniUtils;
 import helium314.keyboard.latin.utils.KtxKt;
 import helium314.keyboard.latin.utils.LeakGuardHandlerWrapper;
@@ -149,6 +151,13 @@ public class LatinIME extends InputMethodService implements
     private View mInputView;
     private DeshTranslationEngine mDeshTranslationEngine;
     private DeshTranslationView mDeshTranslationView;
+    // Desh bg/g translation input session (bg/g.p0): the box's real InputConnection
+    // (bg/g.S), the synthetic EditorInfo (bg/g.R), and the saved real host connection
+    // (the connection of bg/g.U — everything the translation block writes to the app
+    // goes through this while the panel is open).
+    private InputConnection mDeshTranslationHostConnection;
+    private InputConnection mDeshTranslationBoxConnection;
+    private EditorInfo mDeshTranslationBoxEditorInfo;
     private InsetsOutlineProvider mInsetsUpdater;
     private SuggestionStripView mSuggestionStripView;
     @Nullable
@@ -844,7 +853,12 @@ public class LatinIME extends InputMethodService implements
         mDeshTranslationView = view.findViewById(R.id.desh_translation_view);
         if (mDeshTranslationView != null) {
             mDeshTranslationEngine = new DeshTranslationEngine(this, new DeshTranslationHost() {
-                @Override public InputConnection getInputConnection() { return getCurrentInputConnection(); }
+                @Override public InputConnection getInputConnection() {
+                    // Desh U: while the panel is open the translation block writes to the
+                    // saved real app connection, never to the box.
+                    if (mDeshTranslationHostConnection != null) return mDeshTranslationHostConnection;
+                    return getCurrentInputConnection();
+                }
                 @Override public android.os.IBinder inputViewWindowToken() {
                     // InputMethodService.getWindow() returns the IME Dialog; its decor view lives
                     // on Dialog.getWindow() (a Window). Java field syntax cannot see Kotlin's
@@ -859,10 +873,108 @@ public class LatinIME extends InputMethodService implements
                 @Override public void onTranslationVisibilityChanged(boolean visible) {
                     if (mInputView != null) mInputView.post(mInputView::requestLayout);
                 }
+                @Override public void onTranslationSessionStart() {
+                    // Desh bg/g.p0: save the host connection (U), build the box's real
+                    // InputConnection (S) from a synthetic EditorInfo (R), mark the host
+                    // connection as consuming input so nothing the IME produces leaks to
+                    // the app while the panel is open.
+                    mDeshTranslationHostConnection = getHostInputConnection();
+                    final DeshKeyboardEditText box =
+                            mDeshTranslationView == null ? null : mDeshTranslationView.getEditText();
+                    if (box != null) {
+                        final EditorInfo info = new EditorInfo();
+                        info.actionId = box.getImeActionId();
+                        info.imeOptions = box.getImeOptions();
+                        info.inputType = box.getInputType();
+                        info.actionLabel = box.getImeActionLabel();
+                        info.label = box.getImeActionLabel();
+                        info.packageName = getPackageName();
+                        info.privateImeOptions = box.getPrivateImeOptions();
+                        info.fieldId = box.getId();
+                        info.initialSelEnd = box.getSelectionEnd();
+                        info.initialSelStart = box.getSelectionStart();
+                        info.initialCapsMode = box.getImeOptions() & 0x4000;
+                        mDeshTranslationBoxEditorInfo = info;
+                        mDeshTranslationBoxConnection = box.onCreateInputConnection(info);
+                    }
+                    // Desh jg/e.E(true) -> InputConnection.setImeConsumesInput(true)
+                    // (method exists since API 33; Desh guards SDK >= 31 with its own API).
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                            && mDeshTranslationHostConnection != null)
+                        mDeshTranslationHostConnection.setImeConsumesInput(true);
+                    if (mKeyboardSwitcher != null) mHandler.post(mKeyboardSwitcher::reloadMainKeyboard);
+                }
+                @Override public void onTranslationSessionEnd() {
+                    // Desh a.e()/p0 inverse: restore the host pipeline.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                            && mDeshTranslationHostConnection != null)
+                        mDeshTranslationHostConnection.setImeConsumesInput(false);
+                    mDeshTranslationBoxConnection = null;
+                    mDeshTranslationBoxEditorInfo = null;
+                    mDeshTranslationHostConnection = null;
+                    if (mKeyboardSwitcher != null) mHandler.post(mKeyboardSwitcher::reloadMainKeyboard);
+                }
+                @Override public void onTranslationSelectionChanged(
+                        int oldStart, int oldEnd, int newStart, int newEnd) {
+                    // Desh KeyboardEditText.onSelectionChanged -> bg/g.e0 ->
+                    // mKeyboardSwitcher.p(boolean): the box cursor moved, so refresh the
+                    // keyboard's shift/caps state to match the position inside the box.
+                    if (mKeyboardSwitcher != null)
+                        mKeyboardSwitcher.requestUpdatingShiftState(
+                                getCurrentAutoCapsState(), getCurrentRecapitalizeState());
+                }
+                @Override public void onTranslationTextChanged() {
+                    // Desh KeyboardEditText.setText -> gg/c.z(selStart, true, selEnd):
+                    // flush composing text in the active (box) state, then refresh.
+                    if (mDeshTranslationBoxConnection != null)
+                        mDeshTranslationBoxConnection.finishComposingText();
+                    if (mKeyboardSwitcher != null)
+                        mKeyboardSwitcher.requestUpdatingShiftState(
+                                getCurrentAutoCapsState(), getCurrentRecapitalizeState());
+                }
+                @Override public void onTranslationSourceLanguageChanged(String sourceCode) {
+                    // Desh a.m(): switch the keyboard layout to match the translation
+                    // source language. Only when an enabled subtype for that language
+                    // exists; otherwise keep the current keyboard.
+                    if (mRichImm == null || mKeyboardSwitcher == null) return;
+                    try {
+                        final InputMethodSubtype current = mRichImm.getCurrentSubtype().getRawSubtype();
+                        for (InputMethodSubtype s : mRichImm.getEnabledInputMethodSubtypes(
+                                mRichImm.getInputMethodInfoOfThisIme(), true)) {
+                            // SubtypeUtilsKt.locale() handles the getLocale() String vs
+                            // Locale API change across SDK levels (minSdk 21).
+                            if (SubtypeUtilsKt.locale(s).getLanguage().equalsIgnoreCase(sourceCode)) {
+                                if (current == null || !current.equals(s))
+                                    switchToSubtype(s);
+                                return;
+                            }
+                        }
+                    } catch (Exception ignored) {
+                        // never let a keyboard switch break the translation session
+                    }
+                }
             });
             mDeshTranslationView.setEngine(mDeshTranslationEngine);
             mDeshTranslationEngine.setView(mDeshTranslationView);
         }
+    }
+
+    /**
+     * Desh bg/g.p0 re-points the IME's text pipeline at the box while the translation
+     * panel is open: every InputConnection the IME hands out during the session is the
+     * box's real one (bg/g.S), so no input path can leak into the host application.
+     */
+    @Override
+    public InputConnection getCurrentInputConnection() {
+        if (mDeshTranslationBoxConnection != null && mDeshTranslationEngine != null
+                && mDeshTranslationEngine.isOpen())
+            return mDeshTranslationBoxConnection;
+        return super.getCurrentInputConnection();
+    }
+
+    /** The real app connection (bypasses the translation-box override). */
+    private InputConnection getHostInputConnection() {
+        return super.getCurrentInputConnection();
     }
 
     public void updateSuggestionStripView(View view) {
@@ -1264,7 +1376,11 @@ public class LatinIME extends InputMethodService implements
         // engine's replace-in-place correction). Typing itself still works: it
         // flows through the normal input pipeline untouched.
         final boolean voiceEngineListening = mVoiceEngine != null && mVoiceEngine.isListening();
-        if (isInputViewShown() && !voiceEngineListening
+        // While the Desh translation panel is open the IME's current connection is the
+        // panel box (Desh bg/g state swap): HeliBoard's recorrection/suggestion machinery
+        // must not touch the box text, so it is bypassed for the host's selection updates.
+        final boolean translationPanelOpen = mDeshTranslationEngine != null && mDeshTranslationEngine.isOpen();
+        if (isInputViewShown() && !voiceEngineListening && !translationPanelOpen
                 && mInputLogic.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd,
                 composingSpanStart, composingSpanEnd, settingsValues)) {
             // we don't want to update a manually set shift state if selection changed towards one side

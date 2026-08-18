@@ -14,6 +14,7 @@ import helium314.keyboard.latin.common.ComposedData
 import helium314.keyboard.latin.common.Constants
 import helium314.keyboard.latin.common.InputPointers
 import helium314.keyboard.latin.common.StringUtils
+import helium314.keyboard.latin.common.isLatinScript
 import helium314.keyboard.latin.define.DebugFlags
 import helium314.keyboard.latin.define.DecoderSpecificConstants.SHOULD_AUTO_CORRECT_USING_NON_WHITE_LISTED_SUGGESTION
 import helium314.keyboard.latin.define.DecoderSpecificConstants.SHOULD_REMOVE_PREVIOUSLY_REJECTED_SUGGESTION
@@ -82,11 +83,40 @@ class Suggest(private val mDictionaryFacilitator: DictionaryFacilitator) {
             // ships no Hindi .dict, so this is the only Hindi dictionary source. Hinglish
             // (hi-Latn) is excluded: it is Latin-script and must keep the HeliBoard path.
             DeshInputEngine.isHindiDevanagariSubtype(keyboard.mId.subtype.mainLayoutName) -> {
+                val isPrediction = typedWordString.isEmpty()
                 val words = DeshHindiPredictor.getSuggestions(
-                    typedWordString, ngramContext, typedWordString.isEmpty()
+                    typedWordString, ngramContext, isPrediction
                 )
                 val results = words?.takeIf { it.isNotEmpty() }?.let {
-                    DeshHindiPredictor.toSuggestionResults(it, ngramContext, typedWordString.isEmpty())
+                    DeshHindiPredictor.toSuggestionResults(it, ngramContext, isPrediction)
+                }
+                // Desh transliteration merge (bk/h cond_28 -> g()): for a Latin/Hinglish
+                // typed word the FST engine (libplaywright + transliteration.db) produces
+                // Devanagari candidates that join the top of the strip, deduplicated
+                // against the native results (Desh removes duplicates and promotes the
+                // FST entries). Scores sit above the native range (1_000_000 - index)
+                // and below user words (MAX_SCORE), matching Desh's ordering.
+                if (!isPrediction && results != null && typedWordString.isLatinScript()) {
+                    val translitWords = DeshTransliteration.getSuggestions(typedWordString)
+                    if (!translitWords.isNullOrEmpty()) {
+                        val seen = HashSet<String>()
+                        results.forEach { seen.add(it.mWord) }
+                        translitWords.forEachIndexed { index, word ->
+                            if (seen.add(word)) {
+                                results.add(
+                                    SuggestedWordInfo(
+                                        word,
+                                        ngramContext.extractPrevWordsContext(),
+                                        2_000_000 - index,
+                                        SuggestedWordInfo.KIND_COMPLETION,
+                                        Dictionary.DICTIONARY_DESH_TRANSLITERATION,
+                                        SuggestedWordInfo.NOT_AN_INDEX,
+                                        SuggestedWordInfo.NOT_A_CONFIDENCE
+                                    )
+                                )
+                            }
+                        }
+                    }
                 }
                 // Desh user-native-word merge: a manually stored word for the exact typed
                 // word is merged at Integer.MAX_VALUE (Desh's usernativewords/a.a() result,
@@ -111,12 +141,11 @@ class Suggest(private val mDictionaryFacilitator: DictionaryFacilitator) {
                     }
                 results
             }
-            // Phase 13C: English prefix queries are sourced exclusively from the original
-            // Desh English dictionary — but only on the dedicated desh_english subtype.
-            // Plain HeliBoard English keeps the HeliBoard pipeline untouched. The English
-            // LM/learned-word path is deliberately not active yet; if the Desh resource
-            // cannot answer, normal HeliBoard is retained.
-            isDeshEnglishSubtype && typedWordString.isNotEmpty() -> {
+            // Desh English: both typed-word and next-word queries go through DeshEnglishPredictor,
+            // which mirrors sj/b.g() from the original Desh app. It queries the main dictionary
+            // (english_dictionary.bin) AND the learned dictionary ("history" type), merges by
+            // score, and returns results matching Desh's merge order.
+            isDeshEnglishSubtype -> {
                 DeshEnglishPredictor.getSuggestions(
                     wordComposer.composedDataSnapshot,
                     ngramContext,
@@ -132,32 +161,10 @@ class Suggest(private val mDictionaryFacilitator: DictionaryFacilitator) {
             else mDictionaryFacilitator.getSuggestionResults(wordComposer.composedDataSnapshot, ngramContext, keyboard,
                 settingsValuesForSuggestion, SESSION_ID_TYPING, inputStyleIfNotPrediction)
 
-        // Phase 13O: Desh English uses a dedicated learned dictionary. Keep it separate from
-        // HeliBoard's ordinary UserHistoryDictionary so the Desh-English learner has its own
-        // persistent binary dictionary and native scoring path.
-        if (isDeshEnglishSubtype && deshResults != null) runCatching {
-            val learned = DeshEnglishLearningManager.suggestions(
-                mDictionaryFacilitator.currentLocale, wordComposer.composedDataSnapshot, ngramContext,
-                settingsValuesForSuggestion, SESSION_ID_TYPING
-            )
-            // Merge through SuggestionResults.add() so its capacity is respected.
-            // Replace an existing candidate with the learned/native-scored version rather
-            // than allowing two entries for the same word.
-            for (candidate in learned) {
-                val existing = suggestionResults.firstOrNull { it.mWord == candidate.mWord }
-                if (existing != null) suggestionResults.remove(existing)
-                suggestionResults.add(candidate)
-                if (suggestionResults.mRawSuggestions != null) {
-                    suggestionResults.mRawSuggestions.removeAll { it.mWord == candidate.mWord }
-                    suggestionResults.mRawSuggestions.add(candidate)
-                }
-            }
-        }.onFailure { Log.w("Suggest", "English Desh learned-dictionary suggestions failed", it) }
-
-        // Deliberately no automatic learned-word merge here: Desh does not auto-learn typed
-        // words (user words are manual, see DeshNativeWordStore). Normal HeliBoard learning
-        // (UserHistoryDictionary / personal dictionary) flows through DictionaryFacilitator
-        // as usual and is unaffected.
+        // Deliberately no automatic learned-word merge here: Desh's learned dictionary is now
+        // queried inside DeshEnglishPredictor (matching sj/b.g()'s ["main", "history"] merge),
+        // so results arrive pre-merged. Normal HeliBoard learning flows through
+        // DictionaryFacilitator as usual and is unaffected.
 
         val trailingSingleQuotesCount = StringUtils.getTrailingSingleQuotesCount(typedWordString)
         val capsMode = getCapsModeForTyping(wordComposer, keyboard)

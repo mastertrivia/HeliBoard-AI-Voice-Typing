@@ -34,10 +34,25 @@ import java.net.URLEncoder
  * translation block needs.
  */
 interface DeshTranslationHost {
+    /** Real host InputConnection (Desh U) — while the panel is open this is the saved
+     *  app connection, never the box. */
     fun getInputConnection(): InputConnection?
     fun inputViewWindowToken(): IBinder?
     fun currentLanguageCode(): String
     fun onTranslationVisibilityChanged(visible: Boolean)
+
+    // ---- Desh bg/g.p0 input session (the IME is re-pointed at the box) ----
+    /** Desh bg/g.p0: save the host connection, create the box's real InputConnection
+     *  (Desh S), setImeConsumesInput(true). Called before the panel becomes visible. */
+    fun onTranslationSessionStart()
+    /** Desh a.e()/p0 inverse: restore the host pipeline, setImeConsumesInput(false). */
+    fun onTranslationSessionEnd()
+    /** Desh KeyboardEditText.onSelectionChanged -> bg/g.e0 -> mKeyboardSwitcher.p. */
+    fun onTranslationSelectionChanged(oldStart: Int, oldEnd: Int, newStart: Int, newEnd: Int)
+    /** Desh KeyboardEditText.setText -> gg/c.z (composer flush). */
+    fun onTranslationTextChanged()
+    /** Desh a.m(): switch the keyboard layout to match the translation source language. */
+    fun onTranslationSourceLanguageChanged(sourceCode: String)
 }
 
 /** Desh translation controller (com/deshkeyboard/translation/a). */
@@ -62,6 +77,14 @@ class DeshTranslationEngine(
 
     /** a.e — whether the target editor already has text (translation gets a leading space). */
     var addSpaceToTranslation = false
+
+    /** Desh KeyboardEditText.H (bg/g) — box selection/text callbacks forwarded to the IME. */
+    private val boxCallback = object : DeshKeyboardEditTextCallback {
+        override fun onSelectionChanged(oldStart: Int, oldEnd: Int, newStart: Int, newEnd: Int) =
+            host.onTranslationSelectionChanged(oldStart, oldEnd, newStart, newEnd)
+        override fun onTextSet(selectionStart: Int, selectionEnd: Int) =
+            host.onTranslationTextChanged()
+    }
 
     /** Desh's commit buffer (jg/e.c StringBuilder): the last text committed into the editor,
      *  used by the diff-commit (jg/e.s) to replace it with the next translation. */
@@ -167,19 +190,23 @@ class DeshTranslationEngine(
             setSource(oldTarget)
     }
 
-    /** xk/d.b(language) — called when a dialog row is picked. */
+    /** xk/d.b(language) — called when a dialog row is picked (h/j + m + i + c in Desh). */
     fun onLanguageSelected(language: DeshTranslationLanguage, isSource: Boolean) {
         if (isSource) setSource(language) else setTarget(language)
+        // Desh xk/d.b: a.m() — switch the keyboard layout to match the new source language.
+        onSourceLanguageChangedForKeyboard()
         view?.initUi()
         translate(view?.typedText.orEmpty())
     }
 
-    /** TranslationView static d — swap source and target. */
+    /** TranslationView static d — swap source and target (h + j + m + i + c in Desh). */
     fun swapLanguages() {
         val oldSource = sourceLanguage
         val oldTarget = targetLanguage
         setSource(oldTarget)
         setTarget(oldSource)
+        // Desh TranslationView.d: a.m() — switch the keyboard layout to match the new source.
+        onSourceLanguageChangedForKeyboard()
         view?.initUi()
         translate(view?.typedText.orEmpty())
     }
@@ -189,6 +216,11 @@ class DeshTranslationEngine(
     // ------------------------------------------------------------------
     fun show() {
         val v = view ?: return
+        // Desh a.l() -> bg/g.p0: re-point the IME at the box BEFORE it becomes the text
+        // target — save the host connection, build the box's real InputConnection,
+        // setImeConsumesInput(true).
+        host.onTranslationSessionStart()
+        v.setSelectionCallback(boxCallback)
         v.visibility = android.view.View.VISIBLE
         // Re-tint from the current theme every open (theme may have changed since init).
         v.applyThemeColors()
@@ -203,6 +235,7 @@ class DeshTranslationEngine(
         v.showLanguageRow(showLanguageRow = true)
         // a.l(): compute e — whether the editor already contains text (prepend a space later).
         // Desh checks exactly ONE character before the cursor (jg/e.p(1)) and only ' ' (0x20).
+        // host.getInputConnection() is the SAVED host connection while the panel is open.
         val ic = host.getInputConnection()
         val beforeCursor = ic?.getTextBeforeCursor(1, 0)?.toString().orEmpty()
         addSpaceToTranslation = beforeCursor.isNotEmpty() && beforeCursor.last() != ' '
@@ -217,11 +250,14 @@ class DeshTranslationEngine(
         request?.cancel()
         v.visibility = android.view.View.GONE
         v.detachTextWatcher()
+        v.setSelectionCallback(null)
         v.editText.isCursorVisible = false
         v.editText.text.clear()
         v.editText.clearFocus()
         if (apply) host.getInputConnection()?.finishComposingText()
         host.onTranslationVisibilityChanged(false)
+        // Desh a.e(): restore the host IME pipeline (U back, setImeConsumesInput(false)).
+        host.onTranslationSessionEnd()
     }
 
     // ------------------------------------------------------------------
@@ -297,7 +333,7 @@ class DeshTranslationEngine(
 
         val list = root.findViewById<RecyclerView>(R.id.language_list)
         list.layoutManager = LinearLayoutManager(contextTheme)
-        list.adapter = LanguageListAdapter(
+        val adapter = LanguageListAdapter(
             used = used,
             rest = rest,
             selected = selected,
@@ -305,6 +341,13 @@ class DeshTranslationEngine(
                 onLanguageSelected(language, isSource)
             }
         )
+        list.adapter = adapter
+        // Desh a.k(): wire the FastScrollerView to the list (x = RecyclerView,
+        // addOnScrollListener(S)) and refresh its theme colors.
+        val fastScroller = root.findViewById<DeshFastScrollerView>(R.id.fast_scroller)
+        fastScroller.targetRecyclerView = list
+        fastScroller.letterProvider = { position -> adapter.letterForPosition(position) }
+        fastScroller.applyThemeColors()
 
         val builder = AlertDialog.Builder(contextTheme)
         builder.setView(root)
@@ -345,9 +388,12 @@ class DeshTranslationEngine(
         return info.isConnected
     }
 
-    /** a.m() — keyboard-mode adjust after a source-language change. HeliBoard keeps its
-     *  keyboard; nothing to change here (documented boundary decision). */
-    fun onSourceLanguageChangedForKeyboard() = Unit
+    /** a.m() — switch the keyboard layout to match the translation source language
+     *  (Desh: native -> Hindi keyboard, other -> English/matching keyboard). */
+    fun onSourceLanguageChangedForKeyboard() {
+        if (!isOpen()) return
+        host.onTranslationSourceLanguageChanged(sourceLanguage.code)
+    }
 
     /** Release everything on IME destroy. */
     fun destroy() {
@@ -399,6 +445,25 @@ private class LanguageListAdapter(
                 (holder.itemView as TextView).setTextColor(colors.get(helium314.keyboard.latin.common.ColorType.KEY_TEXT))
             }
         }
+    }
+
+    /** Desh FastScrollerView b(): the bubble letter for a list position, or null when
+     *  the row is outside the recent region (Desh: viewType == 0 && pos < k + 1). */
+    fun letterForPosition(position: Int): String? {
+        if (position < 0 || position >= itemCount) return null
+        if (hasHeader) {
+            // recent region: native/English + used rows (Desh d.size + e.size, +1 offset)
+            if (position < 1 || position > used.size + 1) return null
+            return firstLetter(all[position - 1])
+        }
+        // no recent: Desh pins [native, English] at the top (d = a.b())
+        if (position > 1) return null
+        return firstLetter(all[position])
+    }
+
+    private fun firstLetter(language: DeshTranslationLanguage): String? {
+        val c = language.name.firstOrNull() ?: return null
+        return c.uppercaseChar().toString()
     }
 
     private class HeaderHolder(view: android.view.View) : RecyclerView.ViewHolder(view)

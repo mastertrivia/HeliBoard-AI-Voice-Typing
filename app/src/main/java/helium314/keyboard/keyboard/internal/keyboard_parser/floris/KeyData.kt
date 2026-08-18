@@ -5,6 +5,7 @@
  */
 package helium314.keyboard.keyboard.internal.keyboard_parser.floris
 
+import helium314.keyboard.keyboard.Key
 import helium314.keyboard.keyboard.KeyboardElement
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -161,11 +162,21 @@ class DeshHindiVowelSelector(
         // the matra. Reproduce exactly that: label = syllable + matra, code = matra.
         // For the no-input-vowel key (Desh code -28), the smali skips appending the
         // code point, so its label is just the syllable itself (क), not क + अ.
+        //
+        // Typography: Desh renders every vowel key at the standard letter size no
+        // matter how many code points the composed label has (का कि की … are one
+        // visual cluster). Key.selectTextSize's default branch sizes by code-point
+        // count instead (2+ code points -> mLabelSize), which would shrink the
+        // adapted labels. So explicitly carry the letter-ratio flag over the
+        // dynamic label replacement, preserving the original vowel key's typography.
+        val labelFlags = (activeData.labelFlags and 0x1C0.inv()) or
+                Key.LABEL_FLAGS_FOLLOW_KEY_LETTER_RATIO
         if (activeData.code == KeyCode.DESH_NO_INPUT_VOWEL)
-            return activeData.copy(newLabel = syllable)
+            return activeData.copy(newLabel = syllable, newLabelFlags = labelFlags)
         return activeData.copy(
             newLabel = syllable + activeData.label,
-            newCode = if (activeData.code == KeyCode.UNSPECIFIED) activeData.label.codePointAt(0) else activeData.code
+            newCode = if (activeData.code == KeyCode.UNSPECIFIED) activeData.label.codePointAt(0) else activeData.code,
+            newLabelFlags = labelFlags
         )
     }
 

@@ -9,8 +9,6 @@ import android.content.Context
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.AttributeSet
-import android.view.inputmethod.InputConnection
-import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -49,8 +47,9 @@ class DeshTranslationView @JvmOverloads constructor(
     /** Desh TranslationView.F — last typed text marker. */
     var typedTextMarker = ""
 
-    val editText: EditText get() = etTranslate
-    lateinit private var etTranslate: EditText
+    /** Desh Q/etTranslate — the box is Desh's KeyboardEditText (real InputConnection source). */
+    val editText: DeshKeyboardEditText get() = etTranslate
+    lateinit private var etTranslate: DeshKeyboardEditText
 
     private val textWatcher = object : TextWatcher {
         override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -104,6 +103,11 @@ class DeshTranslationView @JvmOverloads constructor(
         applyThemeColors()
     }
 
+    /** Desh bg/g.p0: etTranslate.setUpdateSelectionCallback(bg/g) — box -> IME feedback. */
+    fun setSelectionCallback(callback: DeshKeyboardEditTextCallback?) {
+        etTranslate.setUpdateSelectionCallback(callback)
+    }
+
     /** Re-applied on every open so the panel always reflects the current theme. */
     fun applyThemeColors() {
         val colors = Settings.getValues()?.mColors ?: return
@@ -113,6 +117,9 @@ class DeshTranslationView @JvmOverloads constructor(
             (pill as? TextView)?.setTextColor(colors.get(ColorType.TOOL_BAR_KEY))
         }
         ibLanguageSwitchSwitch.background?.let { colors.setColor(it, ColorType.TOOL_BAR_KEY_ENABLED_BACKGROUND) }
+        // Desh: closeTranslate's oval uses ?primaryContainer like the switch/pills,
+        // so tint its background the same way (icon stays TOOL_BAR_KEY).
+        closeTranslate.background?.let { colors.setColor(it, ColorType.TOOL_BAR_KEY_ENABLED_BACKGROUND) }
         colors.setColor(ibLanguageSwitchSwitch, ColorType.TOOL_BAR_KEY)
         colors.setColor(closeTranslate, ColorType.TOOL_BAR_KEY)
         colors.setColor(icError, ColorType.KEY_TEXT)

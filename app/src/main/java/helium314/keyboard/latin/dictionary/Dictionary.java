@@ -43,6 +43,15 @@ public abstract class Dictionary {
     public static final PhonyDictionary DICTIONARY_DESH_USER_NATIVE =
             new PhonyDictionary(TYPE_DESH_USER_NATIVE);
 
+    /**
+     * Desh's transliteration (FST) suggestion kind: candidates produced by the
+     * native transliteration engine (libplaywright.so + transliteration.db) for
+     * Latin/Hinglish typed words. Marker dictionary like DICTIONARY_DESH_USER_NATIVE.
+     */
+    public static final String TYPE_DESH_TRANSLITERATION = "desh_transliteration";
+    public static final PhonyDictionary DICTIONARY_DESH_TRANSLITERATION =
+            new PhonyDictionary(TYPE_DESH_TRANSLITERATION);
+
     public static final String TYPE_APPLICATION_DEFINED = "application_defined";
     public static final PhonyDictionary DICTIONARY_APPLICATION_DEFINED =
             new PhonyDictionary(TYPE_APPLICATION_DEFINED);

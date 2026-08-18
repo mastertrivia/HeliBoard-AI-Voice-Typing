@@ -10,6 +10,7 @@ import helium314.keyboard.latin.common.endsWithWordCodepoint
 import helium314.keyboard.latin.common.getFullEmojiAtEnd
 import helium314.keyboard.latin.common.getTouchedWordRange
 import helium314.keyboard.latin.common.isEmoji
+import helium314.keyboard.latin.common.isLatinScript
 import helium314.keyboard.latin.common.isSingleGrapheme
 import helium314.keyboard.latin.common.moveStepsToCharCount
 import helium314.keyboard.latin.common.nonWordCodePointAndNoSpaceBeforeCursor
@@ -209,6 +210,21 @@ class StringUtilsTest {
             if (it !in brokenDetectionAtStart)
                 assert(StringUtils.mightBeEmoji(it.codePointAt(0)))
         }
+    }
+
+    @Test fun `isLatinScript gates Hinglish transliteration input`() {
+        // Hinglish words (Latin letters) -> transliteration applies
+        assert("namaste".isLatinScript())
+        assert("Hello".isLatinScript())
+        assert("aap".isLatinScript())
+        // Devanagari input -> transliteration must NOT apply
+        assert(!"नमस्ते".isLatinScript())
+        assert(!"नम".isLatinScript())
+        // Mixed script -> not pure Latin, exclude (no transliteration)
+        assert(!"namनम".isLatinScript())
+        // Digits / punctuation only -> no Latin letters, exclude
+        assert(!"123".isLatinScript())
+        assert(!"".isLatinScript())
     }
 
     @Test fun `strip trailing separators and connectors`() {

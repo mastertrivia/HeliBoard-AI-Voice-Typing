@@ -27,6 +27,8 @@ class App : Application() {
         Settings.init(this)
         AiVoiceDependencies.initialize(this)
         DeshHindiPredictor.initialize(this)
+        DeshTransliteration.initialize(this)
+        DeshReverseTransliteration.initialize(this)
         DeshEnglishDictionaryLoader.initialize(this)
         DeshEnglishLearningManager.initialize(this)
         DeshNativeWordStore.initialize(this)
