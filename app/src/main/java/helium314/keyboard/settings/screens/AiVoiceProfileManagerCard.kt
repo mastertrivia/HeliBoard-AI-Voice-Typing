@@ -43,6 +43,7 @@ import helium314.keyboard.latin.aivoice.domain.AiVoiceSettingsRepository
 import helium314.keyboard.latin.aivoice.domain.NewProfileDraft
 import helium314.keyboard.latin.aivoice.domain.ProviderCatalog
 import helium314.keyboard.latin.aivoice.domain.ValidationState
+import helium314.keyboard.latin.aivoice.domain.VoiceMode
 import helium314.keyboard.latin.aivoice.runtime.AiVoiceDependencies
 import helium314.keyboard.latin.aivoice.runtime.AiVoiceRecordingState
 import helium314.keyboard.latin.aivoice.runtime.AiVoiceRuntimeState
@@ -53,6 +54,7 @@ import helium314.keyboard.settings.dialogs.ListPickerDialog
 import helium314.keyboard.settings.preferences.Preference
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import java.net.URI
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
@@ -210,15 +212,19 @@ private fun AiVoiceProfilesPage(
                     val saved = if (submitted.id == null) repository.createProfile(submitted.toNewProfile()) else {
                         val existing = config.profiles.firstOrNull { it.id == submitted.id }
                             ?: throw IllegalStateException("Profile no longer exists")
-                        require(submitted.apiKey.isNotBlank() ||
-                            (submitted.providerId == existing.providerId && submitted.modelId == existing.modelId)) {
-                            "A replacement API key is required when changing provider or model"
+                        require(submitted.mode == VoiceMode.LIVE || submitted.apiKey.isNotBlank() ||
+                            (existing.mode == VoiceMode.RECORDING && submitted.providerId == existing.providerId && submitted.modelId == existing.modelId)) {
+                            "A replacement API key is required when changing a Recording provider or model"
                         }
                         repository.saveProfile(submitted.toExisting(existing))
                     }
                     persisted = saved
                     try {
-                        if (submitted.apiKey.isNotBlank()) apiKeyStore.write(saved.id, submitted.apiKey)
+                        if (submitted.mode == VoiceMode.RECORDING && submitted.apiKey.isNotBlank()) {
+                            apiKeyStore.write(saved.id, submitted.apiKey)
+                        } else if (submitted.mode == VoiceMode.LIVE) {
+                            apiKeyStore.delete(saved.id)
+                        }
                         if (submitted.id == null && config.profiles.none { it.id == config.activeProfileId && it.enabled }) {
                             repository.selectActiveProfile(saved.id, recordingActive = false)
                         }
@@ -321,15 +327,21 @@ private data class ProfileEditDraft(
     val displayName: String,
     val providerId: String,
     val modelId: String,
+    val mode: VoiceMode = VoiceMode.RECORDING,
+    val liveBackendBaseUrl: String = "",
     val validation: ValidationState = ValidationState.UNTESTED,
     val apiKey: String = "",
     val providerOptions: Map<String, String> = emptyMap(),
 ) {
-    override fun toString() = "ProfileEditDraft(id=$id, serialNumber=$serialNumber, displayName=$displayName, providerId=$providerId, modelId=$modelId, apiKey=<redacted>)"
-    fun toNewProfile() = NewProfileDraft(displayName.trim(), providerId, modelId, providerOptions)
+    override fun toString() = "ProfileEditDraft(id=$id, serialNumber=$serialNumber, displayName=$displayName, providerId=$providerId, modelId=$modelId, mode=$mode, apiKey=<redacted>)"
+    fun toNewProfile() = NewProfileDraft(
+        displayName.trim(), providerId, modelId, mode,
+        liveBackendBaseUrl.takeIf { mode == VoiceMode.LIVE }, providerOptions,
+    )
     fun toExisting(existing: ApiProfile) = existing.copy(
         displayName = displayName.trim(), providerId = providerId, modelId = modelId,
-        validation = if (providerId == existing.providerId && modelId == existing.modelId) existing.validation else ValidationState.UNTESTED,
+        mode = mode, liveBackendBaseUrl = liveBackendBaseUrl.takeIf { mode == VoiceMode.LIVE },
+        validation = if (providerId == existing.providerId && modelId == existing.modelId && mode == existing.mode) existing.validation else ValidationState.UNTESTED,
         providerOptions = providerOptions,
     )
     companion object {
@@ -341,7 +353,10 @@ private data class ProfileEditDraft(
     }
 }
 
-private fun ApiProfile.toDraft() = ProfileEditDraft(id, serialNumber, displayName, providerId, modelId, validation, providerOptions = providerOptions)
+private fun ApiProfile.toDraft() = ProfileEditDraft(
+    id, serialNumber, displayName, providerId, modelId, mode, liveBackendBaseUrl.orEmpty(),
+    validation, providerOptions = providerOptions,
+)
 
 @Composable
 private fun ProfileEditorDialog(
@@ -354,10 +369,11 @@ private fun ProfileEditorDialog(
     onDelete: (() -> Unit)?,
 ) {
     var draft by remember(initial) { mutableStateOf(initial) }
+    var choosingMode by remember { mutableStateOf(false) }
     var choosingProvider by remember { mutableStateOf(false) }
     var choosingModel by remember { mutableStateOf(false) }
-    LaunchedEffect(initial.id) {
-        if (initial.id != null) {
+    LaunchedEffect(initial.id, initial.mode) {
+        if (initial.id != null && initial.mode == VoiceMode.RECORDING) {
             val storedKey = try {
                 apiKeyStore.read(initial.id)
             } catch (cancelled: CancellationException) {
@@ -369,18 +385,35 @@ private fun ProfileEditorDialog(
         }
     }
     val descriptor = catalog.provider(draft.providerId)
+    val recordingModeLabel = stringResource(R.string.ai_voice_mode_recording)
+    val liveModeLabel = stringResource(R.string.ai_voice_mode_live)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (draft.id == null) stringResource(R.string.ai_voice_add_profile) else stringResource(R.string.ai_voice_edit_profile)) },
         text = {
             Column {
                 OutlinedTextField(value = draft.displayName, onValueChange = { draft = draft.copy(displayName = it) }, label = { Text(stringResource(R.string.ai_voice_profile_name)) }, enabled = !saving, modifier = Modifier.fillMaxWidth())
-                Preference(name = stringResource(R.string.ai_voice_provider), description = descriptor?.label ?: stringResource(R.string.ai_voice_unavailable_provider), onClick = { if (!saving) choosingProvider = true })
-                Preference(name = stringResource(R.string.ai_voice_model), description = descriptor?.models?.firstOrNull { it.id == draft.modelId }?.label ?: stringResource(R.string.ai_voice_unavailable_model), onClick = { if (!saving && descriptor != null) choosingModel = true })
-                OutlinedTextField(value = draft.apiKey, onValueChange = { draft = draft.copy(apiKey = it) }, label = { Text(stringResource(R.string.ai_voice_api_key)) }, enabled = !saving, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Text), modifier = Modifier.fillMaxWidth())
+                Preference(
+                    name = stringResource(R.string.ai_voice_mode),
+                    description = if (draft.mode == VoiceMode.RECORDING) stringResource(R.string.ai_voice_mode_recording) else stringResource(R.string.ai_voice_mode_live),
+                    onClick = { if (!saving) choosingMode = true },
+                )
+                Preference(name = stringResource(R.string.ai_voice_provider), description = descriptor?.label ?: stringResource(R.string.ai_voice_unavailable_provider), onClick = { if (!saving && draft.mode == VoiceMode.RECORDING) choosingProvider = true })
+                Preference(name = stringResource(R.string.ai_voice_model), description = descriptor?.models?.firstOrNull { it.id == draft.modelId }?.label ?: stringResource(R.string.ai_voice_unavailable_model), onClick = { if (!saving && draft.mode == VoiceMode.RECORDING && descriptor != null) choosingModel = true })
+                if (draft.mode == VoiceMode.RECORDING) {
+                    OutlinedTextField(value = draft.apiKey, onValueChange = { draft = draft.copy(apiKey = it) }, label = { Text(stringResource(R.string.ai_voice_api_key)) }, enabled = !saving, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Text), modifier = Modifier.fillMaxWidth())
+                } else {
+                    OutlinedTextField(value = draft.liveBackendBaseUrl, onValueChange = { draft = draft.copy(liveBackendBaseUrl = it) }, label = { Text(stringResource(R.string.ai_voice_live_backend_url)) }, supportingText = { Text(stringResource(R.string.ai_voice_live_backend_url_summary)) }, enabled = !saving, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Uri), modifier = Modifier.fillMaxWidth())
+                }
             }
         },
-        confirmButton = { TextButton(enabled = !saving && draft.displayName.isNotBlank() && draft.apiKey.isNotBlank() && catalog.supports(draft.providerId, draft.modelId), onClick = { onSave(draft) }) { Text(stringResource(android.R.string.ok)) } },
+        confirmButton = { TextButton(
+            enabled = !saving && draft.displayName.isNotBlank() &&
+                catalog.supports(draft.providerId, draft.modelId, draft.mode) &&
+                ((draft.mode == VoiceMode.RECORDING && draft.apiKey.isNotBlank()) ||
+                    (draft.mode == VoiceMode.LIVE && isValidHttpsBaseUrl(draft.liveBackendBaseUrl))),
+            onClick = { onSave(draft) },
+        ) { Text(stringResource(android.R.string.ok)) } },
         dismissButton = {
             Column {
                 onDelete?.let { TextButton(enabled = !saving, onClick = it) { Text(stringResource(R.string.ai_voice_remove_profile)) } }
@@ -388,8 +421,32 @@ private fun ProfileEditorDialog(
             }
         },
     )
-    if (choosingProvider) ListPickerDialog(onDismissRequest = { choosingProvider = false }, title = { Text(stringResource(R.string.ai_voice_provider)) }, items = catalog.providers().filter { it.models.isNotEmpty() }, selectedItem = descriptor, getItemName = { it.label }, onItemSelected = { provider -> draft = draft.copy(providerId = provider.id, modelId = provider.models.first().id, validation = ValidationState.UNTESTED, providerOptions = emptyMap()); choosingProvider = false })
-    if (choosingModel && descriptor != null) ListPickerDialog(onDismissRequest = { choosingModel = false }, title = { Text(stringResource(R.string.ai_voice_model)) }, items = descriptor.models, selectedItem = descriptor.models.firstOrNull { it.id == draft.modelId }, getItemName = { it.label }, onItemSelected = { model -> draft = draft.copy(modelId = model.id, validation = ValidationState.UNTESTED); choosingModel = false })
+    if (choosingMode) ListPickerDialog(
+        onDismissRequest = { choosingMode = false },
+        title = { Text(stringResource(R.string.ai_voice_mode)) },
+        items = VoiceMode.entries,
+        selectedItem = draft.mode,
+        getItemName = { if (it == VoiceMode.RECORDING) recordingModeLabel else liveModeLabel },
+        onItemSelected = { mode ->
+            val model = catalog.providers().flatMap { provider -> provider.models.map { provider.id to it } }
+                .first { mode in it.second.supportedModes }
+            draft = draft.copy(
+                mode = mode, providerId = model.first, modelId = model.second.id,
+                apiKey = if (mode == VoiceMode.LIVE) "" else draft.apiKey,
+                liveBackendBaseUrl = if (mode == VoiceMode.RECORDING) "" else draft.liveBackendBaseUrl,
+                validation = ValidationState.UNTESTED, providerOptions = emptyMap(),
+            )
+            choosingMode = false
+        },
+    )
+    if (choosingProvider) ListPickerDialog(onDismissRequest = { choosingProvider = false }, title = { Text(stringResource(R.string.ai_voice_provider)) }, items = catalog.providers().filter { provider -> provider.models.any { VoiceMode.RECORDING in it.supportedModes } }, selectedItem = descriptor, getItemName = { it.label }, onItemSelected = { provider -> draft = draft.copy(providerId = provider.id, modelId = provider.models.first { VoiceMode.RECORDING in it.supportedModes }.id, validation = ValidationState.UNTESTED, providerOptions = emptyMap()); choosingProvider = false })
+    if (choosingModel && descriptor != null) ListPickerDialog(onDismissRequest = { choosingModel = false }, title = { Text(stringResource(R.string.ai_voice_model)) }, items = descriptor.models.filter { draft.mode in it.supportedModes }, selectedItem = descriptor.models.firstOrNull { it.id == draft.modelId }, getItemName = { it.label }, onItemSelected = { model -> draft = draft.copy(modelId = model.id, validation = ValidationState.UNTESTED); choosingModel = false })
+}
+
+private fun isValidHttpsBaseUrl(value: String): Boolean {
+    val uri = runCatching { URI(value.trim()) }.getOrNull() ?: return false
+    return uri.scheme.equals("https", ignoreCase = true) && !uri.host.isNullOrBlank() &&
+        uri.userInfo == null && uri.query == null && uri.fragment == null
 }
 
 @Composable

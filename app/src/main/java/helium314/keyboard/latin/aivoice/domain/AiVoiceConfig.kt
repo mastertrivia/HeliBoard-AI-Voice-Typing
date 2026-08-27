@@ -15,7 +15,7 @@ data class AiVoiceConfig(
     val rotation: RotationConfig = RotationConfig(),
 ) {
     companion object {
-        const val SCHEMA_VERSION = 6
+        const val SCHEMA_VERSION = 7
         /** Hard product limit: one encrypted credential is owned by each profile. */
         const val MAX_PROFILES = 100
     }
@@ -28,12 +28,18 @@ data class ApiProfile(
     val displayName: String,
     val providerId: String,
     val modelId: String,
+    val mode: VoiceMode = VoiceMode.RECORDING,
+    /** Non-secret HTTPS service root used only by future Live enrollment/token calls. */
+    val liveBackendBaseUrl: String? = null,
     /** Disabled profiles remain saved but are excluded from selection, rotation, and fallback. */
     val enabled: Boolean = true,
     val validation: ValidationState = ValidationState.UNTESTED,
     val providerOptions: Map<String, String> = emptyMap(),
     val accumulatedRecordingMillis: Long = 0L,
 )
+
+@Serializable
+enum class VoiceMode { RECORDING, LIVE }
 
 @Serializable
 enum class ValidationState { UNTESTED, VALID, INVALID_API_KEY, NETWORK_ERROR, PROVIDER_ERROR }
@@ -82,7 +88,11 @@ data class ProviderDescriptor(
 )
 
 @Serializable
-data class ModelDescriptor(val id: String, val label: String)
+data class ModelDescriptor(
+    val id: String,
+    val label: String,
+    val supportedModes: Set<VoiceMode> = setOf(VoiceMode.RECORDING),
+)
 
 /** Immutable per-session view; settings edits never alter an active recording. */
 data class SessionPolicySnapshot(

@@ -36,6 +36,15 @@ public abstract class BluetoothScoManager {
     private CountDownTimer voiceRecognitionTimer = new VoiceRecognitionTimer(10000, 1000);
     private BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 
+    /** Delivers SCO readiness once; both legacy and profile broadcasts may report it. */
+    private void notifyScoConnectedOnce() {
+        if (this.scoConnected) {
+            return;
+        }
+        this.scoConnected = true;
+        this.onScoConnected();
+    }
+
     class AclReceiver extends BroadcastReceiver {
         AclReceiver() {
         }
@@ -83,7 +92,7 @@ public abstract class BluetoothScoManager {
                     }
                     return;
                 }
-                BluetoothScoManager.this.scoConnected = true;
+                boolean wasScoConnected = BluetoothScoManager.this.scoConnected;
                 if (BluetoothScoManager.this.scoStarting) {
                     BluetoothScoManager.this.scoStarting = false;
                     BluetoothScoManager.this.onHeadsetConnected();
@@ -92,7 +101,9 @@ public abstract class BluetoothScoManager {
                     BluetoothScoManager.this.connecting = false;
                     BluetoothScoManager.this.scoConnectTimer.cancel();
                 }
-                BluetoothScoManager.this.onScoConnected();
+                if (!wasScoConnected) {
+                    BluetoothScoManager.this.notifyScoConnectedOnce();
+                }
                 str = "Sco connected";
             }
             Log.d("BluetoothHeadsetUtils", str);
@@ -181,12 +192,14 @@ public abstract class BluetoothScoManager {
                 Log.d("BluetoothHeadsetUtils", "\nAction = " + action + "\nState = " + intExtra2);
                 if (intExtra2 == 12) {
                     Log.d("BluetoothHeadsetUtils", "\nHeadset audio connected");
-                    BluetoothScoManager.this.scoConnected = true;
+                    boolean wasScoConnected = BluetoothScoManager.this.scoConnected;
                     if (BluetoothScoManager.this.connecting) {
                         BluetoothScoManager.this.connecting = false;
                         BluetoothScoManager.this.voiceRecognitionTimer.cancel();
                     }
-                    BluetoothScoManager.this.onScoConnected();
+                    if (!wasScoConnected) {
+                        BluetoothScoManager.this.notifyScoConnectedOnce();
+                    }
                     return;
                 }
                 if (intExtra2 != 10) {

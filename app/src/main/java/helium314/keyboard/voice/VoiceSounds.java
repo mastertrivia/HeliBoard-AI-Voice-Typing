@@ -6,7 +6,7 @@
 // restarts, which is why the old behavior sounded random). To get the two
 // *distinct, reliable* sounds Desh shows (start/listening + stop/closing), we
 // play them ourselves, strictly tied to the actual engine listening state
-// (LatinIME.onVoiceEngineListeningStateChanged), not to the mic tap.
+// (LatinIME.onVoiceEngineStateChanged), not to the mic tap.
 package helium314.keyboard.voice;
 
 import android.media.AudioManager;

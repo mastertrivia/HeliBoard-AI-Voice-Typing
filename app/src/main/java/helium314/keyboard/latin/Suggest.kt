@@ -77,19 +77,31 @@ class Suggest(private val mDictionaryFacilitator: DictionaryFacilitator) {
                       isCorrectionEnabled: Boolean, sequenceNumber: Int): SuggestedWords {
         val typedWordString = wordComposer.typedWord
         val resultsArePredictions = !wordComposer.isComposingWord
-        val isDeshEnglishSubtype = DeshInputEngine.isDeshEnglishSubtype(keyboard.mId.subtype.mainLayoutName)
+        val mainLayoutName = keyboard.mId.subtype.mainLayoutName
+        val isDeshEnglishSubtype = DeshInputEngine.isDeshEnglishSubtype(mainLayoutName)
+        val isDeshHindiSubtype = DeshInputEngine.isHindiDevanagariSubtype(mainLayoutName)
+        val providerRequest = PredictionProviderResolver.resolve(mainLayoutName)?.let { provider ->
+            ProviderRequest(
+                composedText = wordComposer.composedDataSnapshot.mTypedWord.toString(),
+                typedText = typedWordString,
+                ngramContext = ngramContext,
+                mode = if (typedWordString.isEmpty()) PredictionMode.PREDICTION else PredictionMode.CORRECTION,
+                settings = settingsValuesForSuggestion,
+                routing = ProviderRoutingIdentity(keyboard.mId.locale.toLanguageTag(), mainLayoutName ?: ""),
+                generation = sequenceNumber.toLong(),
+                token = sequenceNumber.toString(),
+                composedData = wordComposer.composedDataSnapshot,
+                sessionId = SESSION_ID_TYPING,
+                inputStyle = inputStyleIfNotPrediction,
+            ).let(provider::getCandidates)?.toSuggestionResults(ngramContext, typedWordString.isEmpty())
+        }
         val deshResults = when {
             // The Desh Hindi vocabulary serves every Devanagari Hindi subtype — HeliBoard
             // ships no Hindi .dict, so this is the only Hindi dictionary source. Hinglish
             // (hi-Latn) is excluded: it is Latin-script and must keep the HeliBoard path.
-            DeshInputEngine.isHindiDevanagariSubtype(keyboard.mId.subtype.mainLayoutName) -> {
+            isDeshHindiSubtype -> {
                 val isPrediction = typedWordString.isEmpty()
-                val words = DeshHindiPredictor.getSuggestions(
-                    typedWordString, ngramContext, isPrediction
-                )
-                val results = words?.takeIf { it.isNotEmpty() }?.let {
-                    DeshHindiPredictor.toSuggestionResults(it, ngramContext, isPrediction)
-                }
+                val results = providerRequest
                 // Desh transliteration merge (bk/h cond_28 -> g()): for a Latin/Hinglish
                 // typed word the FST engine (libplaywright + transliteration.db) produces
                 // Devanagari candidates that join the top of the strip, deduplicated
@@ -141,19 +153,9 @@ class Suggest(private val mDictionaryFacilitator: DictionaryFacilitator) {
                     }
                 results
             }
-            // Desh English: both typed-word and next-word queries go through DeshEnglishPredictor,
-            // which mirrors sj/b.g() from the original Desh app. It queries the main dictionary
-            // (english_dictionary.bin) AND the learned dictionary ("history" type), merges by
-            // score, and returns results matching Desh's merge order.
-            isDeshEnglishSubtype -> {
-                DeshEnglishPredictor.getSuggestions(
-                    wordComposer.composedDataSnapshot,
-                    ngramContext,
-                    settingsValuesForSuggestion,
-                    SESSION_ID_TYPING,
-                    inputStyleIfNotPrediction,
-                )
-            }
+            // Desh English retrieval is routed through the provider adapter. Its predictor still
+            // merges the main and learned dictionaries in Desh score order.
+            isDeshEnglishSubtype -> providerRequest
             else -> null
         }
         val suggestionResults = deshResults ?: if (typedWordString.isEmpty())

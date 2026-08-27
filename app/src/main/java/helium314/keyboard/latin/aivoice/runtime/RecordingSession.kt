@@ -3,6 +3,7 @@ package helium314.keyboard.latin.aivoice.runtime
 
 import helium314.keyboard.latin.aivoice.domain.ApiProfile
 import helium314.keyboard.latin.aivoice.domain.SessionPolicySnapshot
+import helium314.keyboard.latin.utils.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,7 +32,7 @@ class RecordingSession(
     private val onSilenceTimeout: () -> Unit,
     private val onMaximumDurationReached: () -> Unit,
     private val onCaptureFailure: () -> Unit,
-) {
+) : AiVoiceSession {
     private val sessionJob = SupervisorJob(parentScope.coroutineContext[Job])
     private val scope = CoroutineScope(parentScope.coroutineContext + sessionJob)
     private val insertionGate = SessionInsertionGate()
@@ -40,15 +41,22 @@ class RecordingSession(
     private var captureJob: Job? = null
     private var timeoutJob: Job? = null
     @Volatile private var closed = false
+    @Volatile private var captureCancelled = false
 
-    suspend fun start() {
-        check(!closed) { "Recording session is closed" }
+    /** Returns only after AudioRecord has confirmed active capture for the runtime RECORDING state. */
+    override suspend fun start(): Long {
+        check(!closed && !captureCancelled) { "Recording session is closed" }
         check(captureJob == null) { "Recording session already started" }
-        // Device allocation must complete before the controller publishes RECORDING to the toolbar.
-        withContext(Dispatchers.IO) { recorder.initialize() }
+        withContext(Dispatchers.IO) {
+            recorder.initialize()
+            check(!captureCancelled) { "Recording session capture was cancelled" }
+            recorder.start()
+        }
+        check(!captureCancelled) { "Recording session capture was cancelled" }
+        val startedAtElapsedRealtime = android.os.SystemClock.elapsedRealtime()
         captureJob = scope.launch(Dispatchers.IO) {
             try {
-                recorder.start { frame ->
+                recorder.read { frame ->
                     when (val result = assembler.accept(frame)) {
                         ChunkAssemblyResult.None -> Unit
                         is ChunkAssemblyResult.Chunk -> {
@@ -72,12 +80,22 @@ class RecordingSession(
                 if (!closed) onMaximumDurationReached()
             }
         }
+        return startedAtElapsedRealtime
     }
 
-    suspend fun stopGracefully() = close(graceful = true)
-    suspend fun cancelAndJoin() = close(graceful = false)
+    override suspend fun stopGracefully() = close(graceful = true)
+    override suspend fun cancelAndJoin() = close(graceful = false)
+    /**
+     * Synchronously fences insertion and releases capture before another microphone owner starts.
+     * The controller still follows with [cancelAndJoin] to drain the session's jobs and files.
+     */
+    override fun cancelCaptureImmediately() {
+        captureCancelled = true
+        insertionGate.invalidate()
+        runCatching { recorder.close() }
+    }
     /** Called synchronously by the IME when the old editor is no longer valid. */
-    fun invalidateEditor() = insertionGate.invalidate()
+    override fun invalidateEditor() = insertionGate.invalidate()
 
     private suspend fun close(graceful: Boolean) {
         closeMutex.withLock {
@@ -85,19 +103,28 @@ class RecordingSession(
             closed = true
             if (!graceful) insertionGate.invalidate()
             try {
-                // A broken recorder must not prevent queued work/files from being cancelled and closed.
-                runCatching { recorder.stop() }
+                // stop() establishes the capture-drained boundary before final WAV sealing.
+                runCatching { recorder.stop() }.onFailure {
+                    Log.w(LOG_TAG, "Recording capture drain failed before finalization", it)
+                }
                 runCatching { timeoutJob?.cancelAndJoin() }
                 runCatching { captureJob?.cancelAndJoin() }
                 if (graceful) {
-                    runCatching { assembler.flushFinal() }.getOrNull()?.let { chunk ->
+                    val finalChunk = runCatching { assembler.flushFinal() }
+                        .onFailure { Log.w(LOG_TAG, "Recording final WAV seal failed after capture drain", it) }
+                        .getOrNull()
+                    if (finalChunk == null) Log.w(LOG_TAG, "Recording final capture produced no dispatchable WAV (empty or too short)")
+                    finalChunk?.let { chunk ->
                         runCatching { dispatcher.enqueue(chunk) }
+                            .onFailure { Log.w(LOG_TAG, "Recording final WAV enqueue failed", it) }
                     }
-                    // The dispatcher worker is detached from the session scope, so a timed-out drain
-                    // leaves it running in the background and never abandons an in-flight chunk.
-                    // Provider calls stay bounded by the OkHttp call timeout, and the WAV is deleted
-                    // only after a confirmed insertion, so nothing is silently dropped here.
-                    runCatching { withTimeoutOrNull(FINAL_DRAIN_TIMEOUT_MILLIS) { dispatcher.drain() } }
+                    // The dispatcher explicitly owns accepted WAV work independently of sessionJob.
+                    // A timed-out close returns, but the bounded worker finishes its current serial
+                    // upload/fallback chain and then deterministically releases its own job.
+                    if (withTimeoutOrNull(FINAL_DRAIN_TIMEOUT_MILLIS) { dispatcher.drain() } == null) {
+                        insertionGate.invalidate()
+                        Log.w(LOG_TAG, "Recording final dispatcher drain timed out; retained WAV remains owned by dispatcher")
+                    }
                 } else {
                     runCatching { dispatcher.cancelPending() }
                     runCatching { assembler.discard() }
@@ -113,5 +140,8 @@ class RecordingSession(
         }
     }
 
-    private companion object { const val FINAL_DRAIN_TIMEOUT_MILLIS = 45_000L }
+    private companion object {
+        const val LOG_TAG = "AiVoiceRecording"
+        const val FINAL_DRAIN_TIMEOUT_MILLIS = 45_000L
+    }
 }

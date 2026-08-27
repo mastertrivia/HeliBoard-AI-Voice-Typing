@@ -12,6 +12,11 @@ class BuiltInProviderCatalog : ProviderCatalog {
             ModelDescriptor("gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite — Fastest / cheapest"),
             ModelDescriptor("gemini-3.6-flash", "Gemini 3.6 Flash — Latest / recommended"),
             ModelDescriptor("gemini-flash-latest", "Gemini Flash Latest — Automatic latest Flash"),
+            ModelDescriptor(
+                "gemini-3.1-flash-live-preview",
+                "Gemini 3.1 Flash Live",
+                setOf(VoiceMode.LIVE),
+            ),
         )),
         ProviderDescriptor("openai", "OpenAI", emptyList()),
         ProviderDescriptor("deepgram", "Deepgram", emptyList()),

@@ -75,9 +75,16 @@ class DeshHindiComposer(private val host: Host) {
     /** The currently composed syllable (Desh's "syllable state"). */
     private var active = ""
 
+    /**
+     * The four layout-provided conjunct units are multi-codepoint, but act as one key.
+     * Keep this only while the active composition is still exactly that original unit.
+     */
+    private var activeAtomicConjunct: String? = null
+
     /** Called on input start / finish / subtype change. */
     fun reset() {
         active = ""
+        activeAtomicConjunct = null
     }
 
     /** True while the composer holds an unfinished composed syllable. */
@@ -88,6 +95,7 @@ class DeshHindiComposer(private val host: Host) {
         if (active.isEmpty()) return
         host.commitText(active)
         active = ""
+        activeAtomicConjunct = null
     }
 
     /**
@@ -139,6 +147,16 @@ class DeshHindiComposer(private val host: Host) {
     private fun onBackspace(): Boolean {
         sync()
         if (active.isEmpty()) return false
+        if (activeAtomicConjunct == active) {
+            // This layout key inserted one logical unit even though its Devanagari
+            // spelling has several UTF-16 code units. Remove the composing span
+            // in one operation, like an unchanged ordinary consonant.
+            host.deleteSurroundingText(active.length)
+            active = ""
+            activeAtomicConjunct = null
+            return true
+        }
+        activeAtomicConjunct = null
         val last = active.codePointBefore(active.length)
         active = active.substring(0, active.length - Character.charCount(last))
         if (active.isEmpty()) {
@@ -161,6 +179,15 @@ class DeshHindiComposer(private val host: Host) {
                 return false
             }
             Type.OTHER -> {
+                // Keep the global Space insertion path unchanged. For an unchanged
+                // atomic-conjunct composing span, finish it instead of separately
+                // committing it; InputLogic still inserts the space exactly as before.
+                if (unit == " " && activeAtomicConjunct == active) {
+                    host.finishComposingText()
+                    active = ""
+                    activeAtomicConjunct = null
+                    return false
+                }
                 // Word boundary / punctuation / non-Hindi: commit the syllable.
                 commit()
                 return false
@@ -175,6 +202,7 @@ class DeshHindiComposer(private val host: Host) {
             val candidate = active + unit
             if (DeshHindiLayoutData.SYLLABLES.contains(candidate)) {
                 active = candidate
+                activeAtomicConjunct = null
                 host.setComposingText(active)
                 return true
             }
@@ -184,6 +212,7 @@ class DeshHindiComposer(private val host: Host) {
             commit()
         }
         active = unit
+        activeAtomicConjunct = unit.takeIf { it in ATOMIC_CONJUNCTS }
         host.setComposingText(active)
         return true
     }
@@ -192,6 +221,7 @@ class DeshHindiComposer(private val host: Host) {
         sync()
         if (active.isNotEmpty() && endsWithConsonant(active)) {
             active += unit
+            activeAtomicConjunct = null
             host.setComposingText(active)
             return true
         }
@@ -206,6 +236,7 @@ class DeshHindiComposer(private val host: Host) {
         if (adopted != null) {
             host.deleteSurroundingText(adopted.length)
             active = adopted + unit
+            activeAtomicConjunct = null
             host.setComposingText(active)
             return true
         }
@@ -216,6 +247,7 @@ class DeshHindiComposer(private val host: Host) {
         sync()
         if (active.isNotEmpty() && endsWithConsonant(active)) {
             active += HALANT
+            activeAtomicConjunct = null
             host.setComposingText(active)
             return true
         }
@@ -257,14 +289,17 @@ class DeshHindiComposer(private val host: Host) {
         if (active.isEmpty()) return
         val before = host.getTextBeforeCursor(active.length + 8) ?: return
         if (before.isEmpty()) return
-        if (!before.endsWith(active))
+        if (!before.endsWith(active)) {
             active = ""
+            activeAtomicConjunct = null
+        }
     }
 
     private fun commit() {
         if (active.isEmpty()) return
         host.commitText(active)
         active = ""
+        activeAtomicConjunct = null
     }
 
     private fun classify(unit: String): Type = when {

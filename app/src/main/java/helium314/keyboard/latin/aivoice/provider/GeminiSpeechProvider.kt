@@ -3,6 +3,7 @@ package helium314.keyboard.latin.aivoice.provider
 
 import android.util.Base64
 import helium314.keyboard.latin.aivoice.domain.ProviderCatalog
+import helium314.keyboard.latin.aivoice.language.KeyboardLanguageBehavior
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -119,7 +120,7 @@ class GeminiSpeechProvider(
                             })
                         })
                         add(buildJsonObject {
-                            put("text", TRANSCRIPTION_PROMPT)
+                            put("text", promptFor(request.languageBehavior))
                         })
                     })
                 })
@@ -131,6 +132,12 @@ class GeminiSpeechProvider(
             .header("x-goog-api-key", request.apiKey)
             .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
             .build()
+    }
+
+    private fun promptFor(behavior: KeyboardLanguageBehavior): String = when (behavior) {
+        KeyboardLanguageBehavior.ENGLISH_OUTPUT -> ENGLISH_OUTPUT_PROMPT
+        KeyboardLanguageBehavior.HINDI_OUTPUT -> HINDI_OUTPUT_PROMPT
+        KeyboardLanguageBehavior.UNSPECIFIED -> TRANSCRIPTION_PROMPT
     }
 
     private fun parseResponse(response: Response, request: TranscriptionRequest): TranscriptionResult = try {
@@ -214,6 +221,8 @@ class GeminiSpeechProvider(
         const val PROVIDER_ID = "google"
         const val GENERATE_CONTENT_URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models/"
         const val TRANSCRIPTION_PROMPT = "Transcribe this audio. Return only the exact spoken words as plain text. Do not add commentary, explanations, or formatting."
+        const val ENGLISH_OUTPUT_PROMPT = "Return only natural English plain text. If the speech is not English, translate its meaning into English; do not transliterate it. If it is English, transcribe it. Do not add commentary, explanations, or formatting."
+        const val HINDI_OUTPUT_PROMPT = "Transcribe this audio primarily in Hindi Devanagari plain text. Preserve naturally spoken English names and code-switched English words in Latin script when appropriate. Do not translate or mechanically transliterate those English terms. Return only the transcript without commentary or formatting."
         const val WAV_MEDIA_TYPE = "audio/wav"
         const val RETRY_DELAY_MILLIS = 500L
         const val MAX_RESPONSE_CHARS = 1_048_576

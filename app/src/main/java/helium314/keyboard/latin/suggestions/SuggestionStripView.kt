@@ -54,6 +54,7 @@ import helium314.keyboard.latin.settings.Defaults
 import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.utils.ToolbarKey
 import helium314.keyboard.latin.utils.ToolbarMode
+import helium314.keyboard.voice.SpeechNotesVoiceEngine.VoiceUiState
 import helium314.keyboard.latin.utils.addPinnedKey
 import helium314.keyboard.latin.utils.createToolbarKey
 import helium314.keyboard.latin.utils.dpToPx
@@ -144,30 +145,13 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private var aiVoiceToolbarState = AiVoiceRuntimeState()
     private val aiVoiceToolbarScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var aiVoiceToolbarCollection: Job? = null
-    private var aiVoiceProcessingAnchor: Long? = null
-    private var aiVoiceProcessingOverrideUntil: Long = 0L
     private val aiVoiceToolbarTicker = object : Runnable {
         override fun run() {
             val state = aiVoiceToolbarState
             updateAiVoiceToolbarVisuals()
-            when (state.recording) {
-                AiVoiceRecordingState.RECORDING -> {
-                    val elapsed = SystemClock.elapsedRealtime() - (state.chunkStartedAtElapsedRealtime ?: return)
-                    postDelayed(this, 1_000L - elapsed % 1_000L)
-                }
-                AiVoiceRecordingState.STOPPING -> {
-                    val start = state.processingStartedAtElapsedRealtime ?: return
-                    val now = SystemClock.elapsedRealtime()
-                    val windowEnd = start + AI_VOICE_PROCESSING_WINDOW_MILLIS
-                    if (now >= windowEnd) return
-                    val nextBoundary = listOf(
-                        start + AI_VOICE_PROCESSING_PHASE_MILLIS,
-                        aiVoiceProcessingOverrideUntil,
-                        windowEnd,
-                    ).filter { it > now }.minOrNull() ?: return
-                    postDelayed(this, (nextBoundary - now).coerceAtLeast(50L))
-                }
-                else -> Unit
+            if (state.recording == AiVoiceRecordingState.RECORDING) {
+                val elapsed = SystemClock.elapsedRealtime() - (state.chunkStartedAtElapsedRealtime ?: return)
+                postDelayed(this, 1_000L - elapsed % 1_000L)
             }
         }
     }
@@ -363,9 +347,6 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
                     updateAiVoiceToolbarVisuals()
                     if (state.recording == AiVoiceRecordingState.RECORDING) {
                         post(aiVoiceToolbarTicker)
-                    } else if (state.recording == AiVoiceRecordingState.STOPPING &&
-                        state.processingStartedAtElapsedRealtime != null) {
-                        post(aiVoiceToolbarTicker)
                     }
                 }
             }
@@ -398,11 +379,6 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         if (tag is ToolbarKey) {
             if (tag == ToolbarKey.AI_VOICE) {
                 AudioAndHapticFeedbackManager.getInstance().performHapticAndAudioFeedback(KeyCode.NOT_SPECIFIED, this, HapticEvent.KEY_PRESS)
-                val button = view as? AiVoiceToolbarButton
-                if (button != null && button.isShowingRetry()) {
-                    acknowledgeAiVoiceRetryTap()
-                    return
-                }
                 listener.onAiVoiceToggleRequested()
                 return
             }
@@ -589,34 +565,27 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         pinnedKeys.findViewWithTag<View>(ToolbarKey.VOICE)?.isVisible = true
     }
 
-    private fun setVoiceListening(button: ImageButton, listening: Boolean) {
-        if (listening) {
+    private fun setVoiceState(button: ImageButton, state: VoiceUiState) {
+        (button.drawable as? AnimatedVectorDrawable)?.stop()
+        if (state == VoiceUiState.READY) {
             val drawable = ContextCompat.getDrawable(context, R.drawable.ic_sound_bars_anim)
             if (drawable is AnimatedVectorDrawable) {
-                (button.drawable as? AnimatedVectorDrawable)?.stop()
                 button.setImageDrawable(drawable)
                 drawable.start()
+                return
             }
-        } else {
-            (button.drawable as? AnimatedVectorDrawable)?.stop()
-            button.setImageDrawable(KeyboardIconsSet.instance.getNewDrawable(ToolbarKey.VOICE.name, context))
-            // The freshly fetched mic drawable bypasses the normal toolbar setup
-            // path (setupKey -> colors.setColor(TOOL_BAR_KEY)), so it would render
-            // with the raw drawable's built-in white until the next theme change
-            // rebuilds the toolbar. Re-apply the same theme tint here so the icon
-            // stays correct immediately after Voice stops (Light -> dark mic,
-            // Dark -> light mic), exactly like every other toolbar icon.
-            Settings.getValues().mColors.setColor(button, ColorType.TOOL_BAR_KEY)
         }
+        // CONNECTING/RESTARTING deliberately retain the static microphone: this
+        // acknowledges the tap without implying that speech is already accepted.
+        button.setImageDrawable(KeyboardIconsSet.instance.getNewDrawable(ToolbarKey.VOICE.name, context))
+        Settings.getValues().mColors.setColor(button, ColorType.TOOL_BAR_KEY)
     }
 
-    // Update every VOICE instance (expanded toolbar AND pinned copy), mirroring
-    // updateAiVoiceToolbarVisuals() which iterates both groups. The pinned copy
-    // is created via addKeyToPinnedKeys() and is a separate view that otherwise
-    // never receives the listening drawable swap.
-    fun setVoiceListening(listening: Boolean) {
-        toolbar.findViewWithTag<ImageButton>(ToolbarKey.VOICE)?.let { setVoiceListening(it, listening) }
-        pinnedKeys.findViewWithTag<ImageButton>(ToolbarKey.VOICE)?.let { setVoiceListening(it, listening) }
+    // Update every VOICE instance (expanded toolbar AND pinned copy). Only READY
+    // gets bars; CONNECTING and RESTARTING are static, distinct engine phases.
+    fun setVoiceState(state: VoiceUiState) {
+        toolbar.findViewWithTag<ImageButton>(ToolbarKey.VOICE)?.let { setVoiceState(it, state) }
+        pinnedKeys.findViewWithTag<ImageButton>(ToolbarKey.VOICE)?.let { setVoiceState(it, state) }
     }
 
     private fun updateKeys() {
@@ -662,26 +631,15 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
 
     private fun updateAiVoiceToolbarVisuals(singleButton: ImageButton? = null) {
         val state = aiVoiceToolbarState
-        val recording = state.recording == AiVoiceRecordingState.RECORDING
-        val processing = state.recording == AiVoiceRecordingState.STOPPING
-        val elapsed = if (recording) {
+        val elapsed = if (state.recording == AiVoiceRecordingState.RECORDING) {
             SystemClock.elapsedRealtime() - (state.chunkStartedAtElapsedRealtime ?: 0L)
         } else {
             0L
         }
-        val anchor = state.processingStartedAtElapsedRealtime
-        if (anchor != aiVoiceProcessingAnchor) {
-            aiVoiceProcessingAnchor = anchor
-            aiVoiceProcessingOverrideUntil = 0L
-        }
-        val now = SystemClock.elapsedRealtime()
-        val inWindow = processing && anchor != null && now < anchor + AI_VOICE_PROCESSING_WINDOW_MILLIS
-        val showProcessing = inWindow && anchor != null &&
-            (now < anchor + AI_VOICE_PROCESSING_PHASE_MILLIS || now < aiVoiceProcessingOverrideUntil)
-        val showRetry = inWindow && !showProcessing
+        val colors = Settings.getValues().mColors
         fun update(button: View) {
             if (button.tag == ToolbarKey.AI_VOICE && button is AiVoiceToolbarButton) {
-                button.setVisualState(recording, showProcessing, showRetry, elapsed)
+                button.setVisualState(state.recording, elapsed, colors)
             }
         }
         if (singleButton != null) update(singleButton)
@@ -689,16 +647,6 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             toolbar.forEach(::update)
             pinnedKeys.forEach(::update)
         }
-    }
-
-    private fun acknowledgeAiVoiceRetryTap() {
-        val start = aiVoiceToolbarState.processingStartedAtElapsedRealtime ?: return
-        val now = SystemClock.elapsedRealtime()
-        aiVoiceProcessingOverrideUntil = (now + AI_VOICE_PROCESSING_PHASE_MILLIS)
-            .coerceAtMost(start + AI_VOICE_PROCESSING_WINDOW_MILLIS)
-        removeCallbacks(aiVoiceToolbarTicker)
-        updateAiVoiceToolbarVisuals()
-        post(aiVoiceToolbarTicker)
     }
 
     companion object {

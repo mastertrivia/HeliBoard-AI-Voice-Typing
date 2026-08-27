@@ -39,7 +39,10 @@ class DeshHindiComposerTest {
 
         override fun deleteSurroundingText(before: Int) {
             if (composingStart >= 0) {
-                buffer.delete(maxOf(0, composingStart - before), composingEnd)
+                // InputConnection deletes only the requested preceding text; an
+                // unchanged composing span is removed when that request covers it.
+                val deleteStart = maxOf(0, composingEnd - before)
+                buffer.delete(deleteStart, composingEnd)
                 composingStart = -1
                 composingEnd = -1
             } else {
@@ -116,5 +119,48 @@ class DeshHindiComposerTest {
         composer.onKey(' '.code) // word boundary -> commit
         assertEquals("का committed", "का", host.buffer.toString())
         assertFalse("after commit, no vowel mode", composer.isVowelDiacriticMode())
+    }
+
+    @Test
+    fun dedicatedConjunctsComposeAtomicallyAndSpaceFallsThroughOnce() {
+        for (conjunct in listOf("क्ष", "त्र", "ज्ञ", "श्र")) {
+            val host = FakeHost()
+            val composer = DeshHindiComposer(host)
+
+            assertTrue("$conjunct is handled as a single composer unit", composer.onText(conjunct))
+            assertEquals("$conjunct is the only composing text", conjunct, host.buffer.toString())
+            assertTrue("$conjunct remains an active composition", composer.hasActiveSyllable())
+
+            // The composer finishes the span; normal InputLogic is still responsible
+            // for inserting the actual space after the false return.
+            assertFalse("Space must use normal insertion after $conjunct", composer.onKey(' '.code))
+            host.commitText(" ")
+            assertEquals("$conjunct is not duplicated before Space", "$conjunct ", host.buffer.toString())
+            assertFalse("Space ends the $conjunct composition", composer.hasActiveSyllable())
+        }
+    }
+
+    @Test
+    fun dedicatedConjunctsDeleteAsOneUnchangedAtomicUnit() {
+        for (conjunct in listOf("क्ष", "त्र", "ज्ञ", "श्र")) {
+            val host = FakeHost()
+            val composer = DeshHindiComposer(host)
+
+            composer.onText(conjunct)
+            assertTrue("one Backspace handles $conjunct", composer.onKey(KeyCode.DELETE))
+            assertEquals("one Backspace removes all of $conjunct", "", host.buffer.toString())
+            assertFalse("$conjunct deletion leaves no active composition", composer.hasActiveSyllable())
+        }
+    }
+
+    @Test
+    fun ordinaryHindiHalantCompositionStillWorks() {
+        val host = FakeHost()
+        val composer = DeshHindiComposer(host)
+
+        composer.onKey('क'.code)
+        composer.onKey('्'.code)
+        assertTrue("ordinary Hindi consonant composition remains handled", composer.onKey('त'.code))
+        assertEquals("ordinary conjunct composition is unchanged", "क्त", host.buffer.toString())
     }
 }

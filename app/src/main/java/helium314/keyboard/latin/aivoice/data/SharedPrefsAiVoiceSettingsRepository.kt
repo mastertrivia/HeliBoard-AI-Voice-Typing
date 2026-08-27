@@ -8,6 +8,7 @@ import helium314.keyboard.latin.aivoice.domain.ApiProfile
 import helium314.keyboard.latin.aivoice.domain.BuiltInProviderCatalog
 import helium314.keyboard.latin.aivoice.domain.NewProfileDraft
 import helium314.keyboard.latin.aivoice.domain.ProviderCatalog
+import helium314.keyboard.latin.aivoice.domain.VoiceMode
 import helium314.keyboard.latin.aivoice.diagnostics.AiDiagnosticEvent
 import helium314.keyboard.latin.aivoice.diagnostics.AiDiagnosticsSink
 import helium314.keyboard.latin.aivoice.diagnostics.DiagnosticLevel
@@ -23,6 +24,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.net.URI
 import java.util.UUID
 
 /**
@@ -69,11 +71,14 @@ class SharedPrefsAiVoiceSettingsRepository(
         update("create_profile") { config ->
             require(config.profiles.size < AiVoiceConfig.MAX_PROFILES) { "Maximum number of AI Voice profiles reached" }
             require(draft.displayName.isNotBlank()) { "Profile name is blank" }
-            require(catalog.supports(draft.providerId, draft.modelId)) { "Unsupported provider or model" }
+            require(catalog.supports(draft.providerId, draft.modelId, draft.mode)) { "Unsupported provider, model, or voice mode" }
+            requireValidLiveConfiguration(draft.mode, draft.liveBackendBaseUrl)
             val profile = ApiProfile(
                 id = UUID.randomUUID().toString(), serialNumber = config.profiles.size + 1,
                 displayName = draft.displayName.trim(), providerId = draft.providerId,
-                modelId = draft.modelId, providerOptions = draft.providerOptions,
+                modelId = draft.modelId, mode = draft.mode,
+                liveBackendBaseUrl = draft.liveBackendBaseUrl?.trim()?.trimEnd('/'),
+                providerOptions = draft.providerOptions,
             )
             created = profile
             config.copy(profiles = config.profiles + profile, nextProfileSerial = config.profiles.size + 2)
@@ -87,9 +92,13 @@ class SharedPrefsAiVoiceSettingsRepository(
             require(profile.displayName.isNotBlank()) { "Profile name is blank" }
             // A profile from a newer provider catalog must remain editable/deletable without
             // destroying its unknown metadata. Known pairs are still strictly validated.
-            require(catalog.supports(profile.providerId, profile.modelId) ||
-                (profile.providerId == existing.providerId && profile.modelId == existing.modelId)) { "Unsupported provider or model" }
+            require(catalog.supports(profile.providerId, profile.modelId, profile.mode) ||
+                (profile.providerId == existing.providerId && profile.modelId == existing.modelId && profile.mode == existing.mode)) {
+                "Unsupported provider, model, or voice mode"
+            }
+            requireValidLiveConfiguration(profile.mode, profile.liveBackendBaseUrl)
             config.copy(profiles = config.profiles.map { if (it.id == profile.id) profile.copy(
+                liveBackendBaseUrl = profile.liveBackendBaseUrl?.trim()?.trimEnd('/'),
                 serialNumber = existing.serialNumber,
                 enabled = existing.enabled,
                 displayName = profile.displayName.trim(),
@@ -182,7 +191,7 @@ class SharedPrefsAiVoiceSettingsRepository(
             return AiVoiceConfig()
         }
         val decoded = when (version) {
-            1, 2, 3, 4, 5 -> json.decodeFromString<AiVoiceConfig>(stored)
+            1, 2, 3, 4, 5, 6 -> json.decodeFromString<AiVoiceConfig>(stored)
             AiVoiceConfig.SCHEMA_VERSION -> json.decodeFromString<AiVoiceConfig>(stored)
             else -> throw IllegalStateException("Unsupported AI Voice configuration schema: $version")
         }
@@ -226,7 +235,11 @@ class SharedPrefsAiVoiceSettingsRepository(
                 ?.takeIf { it in SUPPORTED_PROLONGED_SILENCE_MILLIS }
                 ?: DEFAULT_PROLONGED_SILENCE_MILLIS,
         ) else config.recording
-        val renumberedProfiles = config.profiles.mapIndexed { index, profile -> profile.copy(serialNumber = index + 1) }
+        val renumberedProfiles = config.profiles.mapIndexed { index, profile -> profile.copy(
+            serialNumber = index + 1,
+            mode = VoiceMode.RECORDING,
+            liveBackendBaseUrl = null,
+        ) }
         return config.copy(
             schemaVersion = AiVoiceConfig.SCHEMA_VERSION,
             nextProfileSerial = renumberedProfiles.size + 1,
@@ -244,6 +257,14 @@ class SharedPrefsAiVoiceSettingsRepository(
         // Unknown catalog entries can be restored from a future/newer app version. Preserve them
         // verbatim; create/edit of a changed provider-model pair remains catalog-validated above.
         require(profiles.all { it.serialNumber > 0 && it.displayName.isNotBlank() && it.providerId.isNotBlank() && it.modelId.isNotBlank() })
+        profiles.forEach { profile ->
+            if (profile.mode == VoiceMode.LIVE) {
+                require(catalog.supports(profile.providerId, profile.modelId, profile.mode)) {
+                    "Unsupported provider, model, or voice mode"
+                }
+            }
+            requireValidLiveConfiguration(profile.mode, profile.liveBackendBaseUrl)
+        }
         require(activeProfileId == null || profiles.any { it.id == activeProfileId })
         require(pendingProfileId == null || profiles.any { it.id == pendingProfileId })
         require(recording.silenceDurationMillis == null || recording.silenceDurationMillis in SUPPORTED_AUTO_SEND_SILENCE_MILLIS)
@@ -255,6 +276,20 @@ class SharedPrefsAiVoiceSettingsRepository(
         require(rotation.clockRotationIntervalMillis == null || rotation.clockRotationIntervalMillis in SUPPORTED_CLOCK_INTERVAL_MILLIS)
         require(rotation.usageRotationLimitMillis == null || rotation.usageRotationLimitMillis in SUPPORTED_USAGE_LIMIT_MILLIS)
         require(rotation.usageCycleRecordingMillis >= 0L)
+    }
+
+    private fun requireValidLiveConfiguration(mode: VoiceMode, baseUrl: String?) {
+        if (mode == VoiceMode.RECORDING) {
+            require(baseUrl.isNullOrBlank()) { "Recording profiles cannot contain a Live backend endpoint" }
+            return
+        }
+        val value = baseUrl?.trim().orEmpty()
+        require(value.isNotBlank()) { "Live backend endpoint is required" }
+        val uri = runCatching { URI(value) }.getOrNull()
+        require(uri != null && uri.scheme.equals("https", ignoreCase = true) && !uri.host.isNullOrBlank() &&
+            uri.userInfo == null && uri.query == null && uri.fragment == null) {
+            "Live backend endpoint must be an HTTPS base URL without credentials, query, or fragment"
+        }
     }
 
     private companion object {

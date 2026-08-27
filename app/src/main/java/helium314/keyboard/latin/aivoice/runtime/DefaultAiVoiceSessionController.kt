@@ -9,7 +9,7 @@ import helium314.keyboard.latin.aivoice.domain.AiVoiceSettingsRepository
 import helium314.keyboard.latin.aivoice.domain.ApiProfile
 import helium314.keyboard.latin.aivoice.domain.SessionPolicySnapshot
 import helium314.keyboard.latin.aivoice.domain.sessionPolicy
-import helium314.keyboard.latin.aivoice.provider.ProviderResolver
+import helium314.keyboard.voice.VoiceSounds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,17 +25,21 @@ class DefaultAiVoiceSessionController(
     private val runtimeState: AiVoiceRuntimeStateHolder,
     private val diagnostics: AiDiagnosticsSink,
     private val rotationCoordinator: RotationCoordinator,
-    private val providerResolver: ProviderResolver,
+    private val profileEligibility: ProfileEligibility,
     private val hasMicrophonePermission: () -> Boolean,
-    private val createSession: (String, ApiProfile, SessionPolicySnapshot, CoroutineScope) -> RecordingSession,
+    private val createSession: (String, ApiProfile, SessionPolicySnapshot, CoroutineScope) -> AiVoiceSession,
     private val onManualProfileSelected: (ApiProfile) -> Unit = {},
 ) : AiVoiceSessionController {
     private val controllerJob = SupervisorJob()
     private val controllerScope = CoroutineScope(controllerJob + Dispatchers.Main.immediate)
     private val commands = Channel<Command>(Channel.UNLIMITED)
     private var state: SessionState = SessionState.Idle
-    private var session: RecordingSession? = null
-    @Volatile private var drainingSession: RecordingSession? = null
+    private var session: AiVoiceSession? = null
+    @Volatile private var drainingSession: AiVoiceSession? = null
+    // Controller-owned identities keep AI feedback independent from normal-voice state and idempotent.
+    private var confirmedCaptureSessionId: String? = null
+    private var startToneSessionId: String? = null
+    private var stopToneSessionId: String? = null
     private var destroyed = false
     private val commandJob: Job = controllerScope.launch {
         for (command in commands) {
@@ -54,6 +58,13 @@ class DefaultAiVoiceSessionController(
     override fun onNonTerminalChunkSealed(chunkStartedAtElapsedRealtime: Long) =
         enqueue(Command.NonTerminalChunkSealed(chunkStartedAtElapsedRealtime))
     override fun onInputInteraction() = enqueue(Command.InputInteraction)
+    override fun onCompetingVoiceStart() {
+        // Channel reduction is asynchronous, but AudioRecord release must precede the
+        // competing SpeechRecognizer start on this same IME thread.
+        session?.cancelCaptureImmediately()
+        drainingSession?.cancelCaptureImmediately()
+        enqueue(Command.CompetingVoiceStart)
+    }
     override fun onSilenceTimeout() = enqueue(Command.SilenceTimeout)
     override fun onMaximumDurationReached() = enqueue(Command.MaximumDuration)
     override fun onPauseRequested() = enqueue(Command.Pause)
@@ -94,9 +105,11 @@ class DefaultAiVoiceSessionController(
                     chunkModeLabel = "Sequential WAV chunks",
                 ))
             }
-            Command.InputInteraction -> (state as? SessionState.Recording)
-                ?.takeIf { !it.policy.independentMicAndKeyboard }
-                ?.let { finishSession(TerminationReason.INPUT_INTERACTION) }
+            Command.InputInteraction -> (state as? SessionState.Recording)?.let { recording ->
+                session?.onInputInteraction()
+                if (!recording.policy.independentMicAndKeyboard) finishSession(TerminationReason.INPUT_INTERACTION)
+            }
+            Command.CompetingVoiceStart -> if (state !is SessionState.Idle) finishSession(TerminationReason.CANCELLED)
             Command.SilenceTimeout -> if (state is SessionState.Recording) finishSession(TerminationReason.SILENCE_TIMEOUT)
             Command.MaximumDuration -> if (state is SessionState.Recording) finishSession(TerminationReason.MAXIMUM_DURATION)
             Command.ConnectionLost -> if (state !is SessionState.Idle) finishSession(TerminationReason.CANCELLED)
@@ -122,7 +135,7 @@ class DefaultAiVoiceSessionController(
             publishIdle()
             return
         }
-        if (!providerResolver.isProfileUsable(profile)) {
+        if (!profileEligibility.isEligible(profile)) {
             publishIdle(errorCode = "AI-0505")
             return
         }
@@ -135,15 +148,15 @@ class DefaultAiVoiceSessionController(
             sessionId = sessionId,
             profileId = profile.id,
             languageModeLabel = "Keyboard language",
-            chunkModeLabel = "Sequential WAV chunks",
+            chunkModeLabel = if (profile.mode == helium314.keyboard.latin.aivoice.domain.VoiceMode.LIVE) "Live streaming" else "Sequential WAV chunks",
         ))
-        var recordingSession: RecordingSession? = null
+        var activeSession: AiVoiceSession? = null
         try {
-            recordingSession = createSession(sessionId, profile, policy, controllerScope)
-            session = recordingSession
-            recordingSession.start()
-            val startedAt = SystemClock.elapsedRealtime()
+            activeSession = createSession(sessionId, profile, policy, controllerScope)
+            session = activeSession
+            val startedAt = activeSession.start()
             state = SessionState.Recording(sessionId, profile.id, startedAt, policy)
+            confirmedCaptureSessionId = sessionId
             runtimeState.publish(AiVoiceRuntimeState(
                 connection = AiVoiceConnectionStatus.CONNECTED,
                 recording = AiVoiceRecordingState.RECORDING,
@@ -152,11 +165,13 @@ class DefaultAiVoiceSessionController(
                 startedAtElapsedRealtime = startedAt,
                 chunkStartedAtElapsedRealtime = startedAt,
                 languageModeLabel = "Keyboard language",
-                chunkModeLabel = "Sequential WAV chunks",
+                chunkModeLabel = if (profile.mode == helium314.keyboard.latin.aivoice.domain.VoiceMode.LIVE) "Live streaming" else "Sequential WAV chunks",
             ))
+            playStartToneOnce(sessionId)
         } catch (_: Exception) {
-            runCatching { recordingSession?.cancelAndJoin() }
+            runCatching { activeSession?.cancelAndJoin() }
             session = null
+            playStopToneOnce(sessionId)
             state = SessionState.Idle
             emitSafely(DiagnosticLevel.ERROR, "AI-0310", sessionId, profile)
             publishIdle(errorCode = "AI-0310")
@@ -227,6 +242,8 @@ class DefaultAiVoiceSessionController(
             runCatching { rotationCoordinator.recordActiveDuration(it.profileId, duration) }
             runCatching { rotationCoordinator.completeSession(it.profileId, System.currentTimeMillis(), SystemClock.elapsedRealtime()) }
         }
+        // The recorder close path above has completed; only a confirmed capture session can stop-tone.
+        playStopToneOnce(sessionId)
         state = SessionState.Idle
         publishIdle()
     }
@@ -241,12 +258,35 @@ class DefaultAiVoiceSessionController(
 
     private suspend fun recoverFromUnexpectedCommandFailure() {
         val activeSession = session
+        val sessionId = when (val currentState = state) {
+            is SessionState.Starting -> currentState.sessionId
+            is SessionState.Recording -> currentState.sessionId
+            is SessionState.Paused -> currentState.sessionId
+            is SessionState.Stopping -> currentState.sessionId
+            SessionState.Idle -> null
+        }
         session = null
         drainingSession = null
         runCatching { activeSession?.cancelAndJoin() }
+        sessionId?.let(::playStopToneOnce)
         state = SessionState.Idle
         publishIdle(errorCode = "AI-0109")
         emitSafely(DiagnosticLevel.ERROR, "AI-0109")
+    }
+
+    private fun playStartToneOnce(sessionId: String) {
+        if (confirmedCaptureSessionId == sessionId && startToneSessionId != sessionId) {
+            startToneSessionId = sessionId
+            VoiceSounds.playListeningStart()
+        }
+    }
+
+    private fun playStopToneOnce(sessionId: String) {
+        if (confirmedCaptureSessionId == sessionId && stopToneSessionId != sessionId) {
+            stopToneSessionId = sessionId
+            VoiceSounds.playListeningStop()
+            confirmedCaptureSessionId = null
+        }
     }
 
     private fun publishIdle(errorCode: String? = null) {
@@ -272,6 +312,7 @@ class DefaultAiVoiceSessionController(
         data class ManualProfileStep(val forward: Boolean) : Command
         data class NonTerminalChunkSealed(val chunkStartedAtElapsedRealtime: Long) : Command
         data object InputInteraction : Command
+        data object CompetingVoiceStart : Command
         data object SilenceTimeout : Command
         data object MaximumDuration : Command
         data object Pause : Command

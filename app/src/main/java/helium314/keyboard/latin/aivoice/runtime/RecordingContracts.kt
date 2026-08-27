@@ -29,7 +29,10 @@ interface AudioRecorder : Closeable {
     val format: PcmFormat
     /** Allocates and validates the capture device before the session becomes visible as recording. */
     suspend fun initialize()
-    suspend fun start(onFrame: suspend (AudioFrame) -> Unit)
+    /** Returns only after the device has entered its confirmed recording state. */
+    suspend fun start()
+    suspend fun read(onFrame: suspend (AudioFrame) -> Unit)
+    /** Requests capture completion and returns only after frames already queued by AudioRecord were delivered. */
     suspend fun stop()
 }
 

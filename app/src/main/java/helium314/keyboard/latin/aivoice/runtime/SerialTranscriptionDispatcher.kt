@@ -37,14 +37,16 @@ internal class SerialTranscriptionDispatcher(
     private val diagnostics: AiDiagnosticsSink,
     parentScope: CoroutineScope,
 ) : TranscriptionDispatcher {
+    // Dispatch owns its lifetime after enqueue: cancelling RecordingSession must not abandon a
+    // retained WAV while its upload/fallback chain is in flight.
     private val job = SupervisorJob()
-    private val scope = CoroutineScope(parentScope.coroutineContext + job + Dispatchers.IO)
+    private val scope = CoroutineScope(parentScope.coroutineContext.minusKey(kotlinx.coroutines.Job) + job + Dispatchers.IO)
     private val queue = Channel<AudioChunk>(QUEUE_CAPACITY)
     private val closeMutex = Mutex()
     private var closed = false
     private val worker = scope.launch {
         for (chunk in queue) process(chunk)
-    }
+    }.also { worker -> worker.invokeOnCompletion { job.cancel() } }
 
     override suspend fun enqueue(chunk: AudioChunk) {
         check(!closed) { "Transcription dispatcher is closed" }

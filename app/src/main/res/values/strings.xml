@@ -1473,6 +1473,11 @@ New dictionary:
     <string name="ai_voice_provider">Provider</string>
     <string name="ai_voice_model">Model</string>
     <string name="ai_voice_api_key">API key</string>
+    <string name="ai_voice_mode">Voice mode</string>
+    <string name="ai_voice_mode_recording">Recording</string>
+    <string name="ai_voice_mode_live">Live</string>
+    <string name="ai_voice_live_backend_url">Live backend base URL</string>
+    <string name="ai_voice_live_backend_url_summary">HTTPS only. No credentials, query, or fragment.</string>
     <string name="ai_voice_validation_status">Validation status</string>
     <string name="ai_voice_validation_untested">Not tested</string>
     <string name="ai_voice_validation_valid">Validated</string>

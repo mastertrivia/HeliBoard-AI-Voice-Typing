@@ -46,6 +46,8 @@ interface AiVoiceSessionController {
     /** A non-terminal chunk was sealed; the toolbar timer starts the next chunk at this instant. */
     fun onNonTerminalChunkSealed(chunkStartedAtElapsedRealtime: Long)
     fun onInputInteraction()
+    /** Cancel capture immediately before the normal voice engine acquires the microphone. */
+    fun onCompetingVoiceStart()
     /** Called by the future session-owned silence detector; never directly by settings UI. */
     fun onSilenceTimeout()
     /** Called by the future session-owned maximum-duration timer; never directly by settings UI. */

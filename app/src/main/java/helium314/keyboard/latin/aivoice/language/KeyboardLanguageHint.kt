@@ -13,6 +13,18 @@ fun interface KeyboardLanguageHint {
     fun currentLanguageTag(): String?
 }
 
+enum class KeyboardLanguageBehavior(val languageTag: String?) {
+    ENGLISH_OUTPUT("en"),
+    HINDI_OUTPUT("hi"),
+    UNSPECIFIED(null),
+}
+
+fun KeyboardLanguageHint.currentBehavior(): KeyboardLanguageBehavior = when (currentLanguageTag()) {
+    "en" -> KeyboardLanguageBehavior.ENGLISH_OUTPUT
+    "hi" -> KeyboardLanguageBehavior.HINDI_OUTPUT
+    else -> KeyboardLanguageBehavior.UNSPECIFIED
+}
+
 /** Reuses HeliBoard's authoritative active subtype rather than introducing an AI language setting. */
 class HeliBoardKeyboardLanguageHint : KeyboardLanguageHint {
     override fun currentLanguageTag(): String? {

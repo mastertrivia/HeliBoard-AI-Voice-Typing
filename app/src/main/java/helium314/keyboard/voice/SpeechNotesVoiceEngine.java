@@ -16,17 +16,13 @@ package helium314.keyboard.voice;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.os.CountDownTimer;
 import android.os.PowerManager;
-import android.provider.Settings;
 import android.text.SpannableString;
 import android.text.style.ForegroundColorSpan;
 import android.view.inputmethod.InputConnection;
 
 import androidx.core.content.ContextCompat;
-
-import java.util.List;
 
 import helium314.keyboard.latin.LatinIME;
 import helium314.keyboard.settings.SettingsActivity;
@@ -45,12 +41,17 @@ public class SpeechNotesVoiceEngine implements VoiceCallback {
     private final CountDownTimer watchdog;
     private PowerManager.WakeLock wakeLock;
 
+    /** Explicit UI phase: only READY represents a recognizer that accepted speech. */
+    public enum VoiceUiState { IDLE, CONNECTING, READY, RESTARTING }
+
+    private VoiceUiState voiceUiState = VoiceUiState.IDLE;
+    /** Remains true across automatic recognizer generations in one user session. */
+    private boolean sessionReachedReady;
+
     /** Length of the currently composing region. (was Speechkeys.q) */
     private int composingLength;
     /** Current recognition language. (was Speechkeys.t) */
     private String language = "en-US";
-    /** Cached Google-service availability. (was Speechkeys.u) */
-    private boolean googleServiceCached;
 
     public SpeechNotesVoiceEngine(LatinIME ime) {
         this.ime = ime;
@@ -94,7 +95,6 @@ public class SpeechNotesVoiceEngine implements VoiceCallback {
         if (powerManager != null) {
             this.wakeLock = powerManager.newWakeLock(WAKE_LOCK_FLAGS, WAKE_LOCK_TAG);
         }
-        this.googleServiceCached = googleServiceAvailable();
     }
 
     /** The mic toggle. (was Speechkeys.startOrPauseListener, minus the billing gate) */
@@ -103,7 +103,9 @@ public class SpeechNotesVoiceEngine implements VoiceCallback {
             stop();
             return;
         }
-        if (!hasRecordAudioPermission() || !googleServiceCached) {
+        // Resolve through the controller on every mic attempt so this gate and the
+        // recognizer use the same current RecognitionService decision.
+        if (!hasRecordAudioPermission() || !controller.refreshRecognitionServiceAvailability()) {
             openSetup();
         } else {
             start();
@@ -111,8 +113,17 @@ public class SpeechNotesVoiceEngine implements VoiceCallback {
     }
 
     /** Full start: controller + BT SCO + watchdog + wake lock. (was Speechkeys.Y) */
-    public void start() {
-        controller.startListening();
+    public synchronized void start() {
+        // SCO readiness is asynchronous and can arrive after the direct mic start.
+        // The active controller session is the single start authority.
+        if (controller.isListening()) {
+            return;
+        }
+        // This runs for every normal-voice entry point, including the SCO callback.
+        ime.stopAiVoiceForNormalVoiceStart();
+        if (!controller.startListening()) {
+            return;
+        }
         bluetoothSco.start();
         watchdog.start();
         if (wakeLock != null && !wakeLock.isHeld()) {
@@ -121,7 +132,7 @@ public class SpeechNotesVoiceEngine implements VoiceCallback {
     }
 
     /** Full stop: BT SCO + controller + watchdog + wake lock. (was Speechkeys.Z) */
-    public void stop() {
+    public synchronized void stop() {
         // Null-safe: VoiceController's constructor can call onError (no speech
         // service) which stops this engine while controller/bluetoothSco are
         // still being initialized.
@@ -135,7 +146,9 @@ public class SpeechNotesVoiceEngine implements VoiceCallback {
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release();
         }
-        ime.onVoiceEngineListeningStateChanged(false);
+        final boolean wasReady = sessionReachedReady;
+        sessionReachedReady = false;
+        setVoiceUiState(VoiceUiState.IDLE, false, wasReady);
     }
 
     /** Stop if currently listening. (was the check inside Speechkeys.onFinishInput) */
@@ -244,22 +257,36 @@ public class SpeechNotesVoiceEngine implements VoiceCallback {
         }
     }
 
-    /** "About to reconnect" — the session is still active, so keep the listening indicator on. (was c() -> W()) */
+    private void setVoiceUiState(VoiceUiState state, boolean playStartTone, boolean playStopTone) {
+        // Every recognizer onReadyForSpeech must restore the READY bars, even if a
+        // provider sends duplicate ready callbacks. Sound eligibility is separate.
+        if (voiceUiState == state && state != VoiceUiState.READY
+                && !(state == VoiceUiState.IDLE && playStopTone)) {
+            return;
+        }
+        voiceUiState = state;
+        ime.onVoiceEngineStateChanged(state, playStartTone, playStopTone);
+    }
+
+    /** "About to reconnect" — show a static restart acknowledgement, never bars. */
     @Override
     public void onAboutToReconnect() {
-        ime.onVoiceEngineListeningStateChanged(true);
+        setVoiceUiState(VoiceUiState.RESTARTING, false, false);
     }
 
-    /** "Wait, connecting" — recognition is (re)starting, keep the listening indicator on. (was d() -> U()) */
+    /** "Wait, connecting" — distinguish initial setup from continuous restart. */
     @Override
     public void onConnecting() {
-        ime.onVoiceEngineListeningStateChanged(true);
+        setVoiceUiState(sessionReachedReady ? VoiceUiState.RESTARTING : VoiceUiState.CONNECTING,
+                false, false);
     }
 
-    /** "Listening..." — drive the mic button's animated three-bar indicator. (was e() -> V()) */
+    /** Only VoiceController.onReadyForSpeech reaches this callback. */
     @Override
     public void onListening() {
-        ime.onVoiceEngineListeningStateChanged(true);
+        final boolean playStartTone = !sessionReachedReady;
+        sessionReachedReady = true;
+        setVoiceUiState(VoiceUiState.READY, playStartTone, false);
     }
 
     /** Error: log and do a full stop. (was Speechkeys.onError) */
@@ -280,34 +307,6 @@ public class SpeechNotesVoiceEngine implements VoiceCallback {
     private boolean hasRecordAudioPermission() {
         return ContextCompat.checkSelfPermission(ime, "android.permission.RECORD_AUDIO")
                 == PackageManager.PERMISSION_GRANTED;
-    }
-
-    /** Google recognition service availability. (was Speechkeys.I) */
-    private boolean googleServiceAvailable() {
-        String string = Settings.Secure.getString(ime.getContentResolver(), "voice_recognition_service");
-        if (string != null && string.indexOf("google") != -1) {
-            return true;
-        }
-        List<ResolveInfo> queryIntentServices = ime.getPackageManager().queryIntentServices(new Intent("android.speech.RecognitionService"), 0);
-        if (queryIntentServices.size() == 0) {
-            return false;
-        }
-        if (queryIntentServices.size() == 1) {
-            if (queryIntentServices.get(0).toString().indexOf("google") == -1) {
-                return false;
-            }
-            return true;
-        }
-        String str2 = "";
-        for (ResolveInfo resolveInfo : queryIntentServices) {
-            if (resolveInfo.toString().indexOf("google") != -1) {
-                str2 = resolveInfo.serviceInfo.packageName + "/" + resolveInfo.serviceInfo.name;
-                if ("com.google.android.googlequicksearchbox/com.google.android.voicesearch.serviceapi.GoogleRecognitionService".equals(str2)) {
-                    return true;
-                }
-            }
-        }
-        return !str2.equals("");
     }
 
     /** Open setup when permission/service missing. (was Speechkeys.z -> LauncherActivity) */

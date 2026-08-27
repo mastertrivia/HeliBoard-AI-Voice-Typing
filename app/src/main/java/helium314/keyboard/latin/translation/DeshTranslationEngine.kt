@@ -11,11 +11,15 @@ package helium314.keyboard.latin.translation
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.Context
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.IBinder
 import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.InputConnection
 import android.widget.TextView
@@ -66,7 +70,6 @@ class DeshTranslationEngine(
     private val PREF_TARGET = "last_selected_target_language"
     private val PREF_USED_SOURCE = "used_source_languages"
     private val PREF_USED_TARGET = "used_target_languages"
-    private val USED_SEPARATOR = "|"
 
     // ---- fields (a.smali) ----
     var state: DeshTranslationState = DeshTranslationState.Idle
@@ -112,7 +115,11 @@ class DeshTranslationEngine(
     // ------------------------------------------------------------------
     @SuppressLint("MissingPermission")
     fun translate(text: String) {
+        // Desh marks the preceding xk/b request cancelled before creating its replacement.
+        // Clear our owner reference too: a callback already queued on the main looper must not
+        // be allowed to render/commit after a newer edit, language change, or panel close.
         request?.cancel()
+        request = null
         if (text.isBlank()) {
             clearCommittedTranslation()
             return
@@ -126,16 +133,26 @@ class DeshTranslationEngine(
             updateState(DeshTranslationState.NoInternet)
             return
         }
-        request = DeshTranslationRequest(
+        var launched: DeshTranslationRequest? = null
+        launched = DeshTranslationRequest(
             url = url,
-            onSuccess = { body -> updateState(parseResponse(body)) },
-            onError = { updateState(DeshTranslationState.Error(context.getString(R.string.translate_failed))) },
-            onRetry = { count -> updateState(DeshTranslationState.Loading(count)) }
-        ).also { it.start() }
+            onSuccess = { body ->
+                if (request === launched) updateState(parseResponse(body))
+            },
+            onError = {
+                if (request === launched)
+                    updateState(DeshTranslationState.Error(context.getString(R.string.translate_failed)))
+            },
+            onRetry = { count ->
+                if (request === launched) updateState(DeshTranslationState.Loading(count))
+            }
+        )
+        request = launched
+        launched!!.start()
     }
 
     /** Desh's engine URL — translate.googleapis.com/translate_a/t?client=gtx&sl=&tl=&q= */
-    private fun buildUrl(text: String, src: String, tgt: String): String {
+    internal fun buildUrl(text: String, src: String, tgt: String): String {
         val base = "https://translate.googleapis.com/translate_a/t"
         val q = URLEncoder.encode(text, "UTF-8")
         return "$base?client=gtx&tl=${URLEncoder.encode(tgt, "UTF-8")}&sl=${URLEncoder.encode(src, "UTF-8")}&q=$q"
@@ -171,30 +188,34 @@ class DeshTranslationEngine(
     // Language selection — a.h(b) / a.j(b) + xk/d (onLanguageSelected)
     // ------------------------------------------------------------------
     fun setSource(language: DeshTranslationLanguage) {
+        addUsedLanguage(PREF_USED_SOURCE, language.code)
         if (language.code == sourceLanguage.code) return
         val oldSource = sourceLanguage
         sourceLanguage = language
         prefs.edit { putString(PREF_SOURCE, language.code) }
-        addUsedLanguage(PREF_USED_SOURCE, language.code)
         if (language.code == targetLanguage.code)
             setTarget(oldSource)
     }
 
     fun setTarget(language: DeshTranslationLanguage) {
+        addUsedLanguage(PREF_USED_TARGET, language.code)
         if (language.code == targetLanguage.code) return
         val oldTarget = targetLanguage
         targetLanguage = language
         prefs.edit { putString(PREF_TARGET, language.code) }
-        addUsedLanguage(PREF_USED_TARGET, language.code)
         if (language.code == sourceLanguage.code)
             setSource(oldTarget)
     }
 
     /** xk/d.b(language) — called when a dialog row is picked (h/j + m + i + c in Desh). */
     fun onLanguageSelected(language: DeshTranslationLanguage, isSource: Boolean) {
-        if (isSource) setSource(language) else setTarget(language)
-        // Desh xk/d.b: a.m() — switch the keyboard layout to match the new source language.
-        onSourceLanguageChangedForKeyboard()
+        if (isSource) {
+            setSource(language)
+            // Desh changes the keyboard subtype only for a source-language pick.
+            onSourceLanguageChangedForKeyboard()
+        } else {
+            setTarget(language)
+        }
         view?.initUi()
         translate(view?.typedText.orEmpty())
     }
@@ -216,6 +237,12 @@ class DeshTranslationEngine(
     // ------------------------------------------------------------------
     fun show() {
         val v = view ?: return
+        // requestFocus() invokes TranslationView's focus listener. Once this session is
+        // already open, that callback must not recursively create a second box/host session.
+        if (isOpen()) {
+            v.editText.isCursorVisible = true
+            return
+        }
         // Desh a.l() -> bg/g.p0: re-point the IME at the box BEFORE it becomes the text
         // target — save the host connection, build the box's real InputConnection,
         // setImeConsumesInput(true).
@@ -248,6 +275,7 @@ class DeshTranslationEngine(
         val v = view ?: return
         if (!isOpen()) return
         request?.cancel()
+        request = null
         v.visibility = android.view.View.GONE
         v.detachTextWatcher()
         v.setSelectionCallback(null)
@@ -324,21 +352,22 @@ class DeshTranslationEngine(
             title.setTextColor(colors.get(helium314.keyboard.latin.common.ColorType.KEY_TEXT))
         }
 
-        val used = usedLanguages(if (isSource) PREF_USED_SOURCE else PREF_USED_TARGET)
-            .mapNotNull { code -> DeshTranslationLanguage.TABLE.firstOrNull { it.code == code } }
-        val all = DeshTranslationLanguage.all()
-        val usedSet = used.map { it.code }.toSet()
-        val rest = all.filter { it.code !in usedSet }
+        val sections = pickerSections(
+            usedLanguages(if (isSource) PREF_USED_SOURCE else PREF_USED_TARGET)
+        )
         val selected = if (isSource) sourceLanguage else targetLanguage
 
         val list = root.findViewById<RecyclerView>(R.id.language_list)
         list.layoutManager = LinearLayoutManager(contextTheme)
+        lateinit var dialog: AlertDialog
         val adapter = LanguageListAdapter(
-            used = used,
-            rest = rest,
+            pinned = sections.pinned,
+            recent = sections.recent,
+            remaining = sections.remaining,
             selected = selected,
             onPick = { language ->
                 onLanguageSelected(language, isSource)
+                dialog.dismiss()
             }
         )
         list.adapter = adapter
@@ -351,24 +380,72 @@ class DeshTranslationEngine(
 
         val builder = AlertDialog.Builder(contextTheme)
         builder.setView(root)
-        val dialog = builder.create()
+        dialog = builder.create()
         dialog.setCanceledOnTouchOutside(true)
         val token = host.inputViewWindowToken()
-        dialog.window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG)
-        if (token != null) dialog.window?.attributes?.token = token
+        val window = dialog.window
+        window?.let {
+            it.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            it.setDimAmount(0.7f)
+            it.decorView.setPadding(0, 0, 0, 0)
+            it.attributes = it.attributes.apply {
+                this.token = token
+                type = WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG // 1003
+            }
+            it.addFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
+        }
         dialog.show()
+        dialog.window?.setLayout(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT
+        )
     }
 
     // ------------------------------------------------------------------
     // Used-language prefs — d.smali
     // ------------------------------------------------------------------
     private fun usedLanguages(key: String): List<String> =
-        prefs.getString(key, "")?.split(USED_SEPARATOR)?.filter { it.isNotEmpty() }.orEmpty()
+        parseUsedLanguages(prefs.getString(key, null))
 
     private fun addUsedLanguage(key: String, code: String) {
-        val current = usedLanguages(key)
-        if (code in current) return
-        prefs.edit { putString(key, (current + code).joinToString(USED_SEPARATOR)) }
+        val updated = updateMru(usedLanguages(key), code)
+        // Reference persists a JSON list. parseUsedLanguages keeps legacy pipe data readable.
+        prefs.edit { putString(key, JsonArray(updated.map(::JsonPrimitive)).toString()) }
+    }
+
+    internal fun pickerSections(recentCodes: List<String>): TranslationPickerSections {
+        val pinned = listOf(DeshTranslationLanguage.native(), DeshTranslationLanguage.ENGLISH)
+            .distinctBy { it.code }
+        val pinnedCodes = pinned.mapTo(mutableSetOf()) { it.code }
+        val recent = recentCodes.asSequence()
+            .distinct()
+            .filterNot { it in pinnedCodes }
+            .mapNotNull { code -> DeshTranslationLanguage.TABLE.firstOrNull { it.code == code } }
+            .toList()
+        val excluded = pinnedCodes + recent.map { it.code }
+        val remaining = DeshTranslationLanguage.all().filterNot { it.code in excluded }
+        return TranslationPickerSections(pinned, recent, remaining)
+    }
+
+    companion object {
+        internal const val MAX_RECENT_LANGUAGES = 4
+
+        internal fun updateMru(current: List<String>, selected: String): List<String> =
+            (listOf(selected) + current.filterNot { it == selected })
+                .distinct()
+                .take(MAX_RECENT_LANGUAGES)
+
+        internal fun parseUsedLanguages(raw: String?): List<String> {
+            if (raw.isNullOrBlank()) return emptyList()
+            val parsedJson = runCatching {
+                Json.parseToJsonElement(raw) as? JsonArray
+            }.getOrNull()?.mapNotNull { (it as? JsonPrimitive)?.content }
+            val values = parsedJson ?: if ('|' in raw) raw.split('|') else emptyList()
+            return values.map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                .take(MAX_RECENT_LANGUAGES)
+        }
     }
 
     // ------------------------------------------------------------------
@@ -398,78 +475,107 @@ class DeshTranslationEngine(
     /** Release everything on IME destroy. */
     fun destroy() {
         request?.cancel()
+        request = null
         view = null
     }
 }
 
-/** RecyclerView adapter for the language picker (Desh xk/g): "Recent" header + rows
- *  with a radio indicator; the selected language is checked. */
+internal data class TranslationPickerSections(
+    val pinned: List<DeshTranslationLanguage>,
+    val recent: List<DeshTranslationLanguage>,
+    val remaining: List<DeshTranslationLanguage>,
+)
+
+/** Reference ordering: pinned Hindi and English, optional Recent header/list, divider, remainder. */
 private class LanguageListAdapter(
-    private val used: List<DeshTranslationLanguage>,
-    private val rest: List<DeshTranslationLanguage>,
+    pinned: List<DeshTranslationLanguage>,
+    recent: List<DeshTranslationLanguage>,
+    remaining: List<DeshTranslationLanguage>,
     private val selected: DeshTranslationLanguage,
     private val onPick: (DeshTranslationLanguage) -> Unit,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
-    private val hasHeader = used.isNotEmpty()
-    private val all: List<DeshTranslationLanguage> get() = if (hasHeader) used + rest else rest
+    private sealed interface Item {
+        data class Language(val value: DeshTranslationLanguage) : Item
+        data object RecentHeader : Item
+        data object Divider : Item
+    }
 
-    override fun getItemCount(): Int = all.size + if (hasHeader) 1 else 0
-
-    override fun getItemViewType(position: Int): Int = if (hasHeader && position == 0) 0 else 1
-
-    override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-        val inflater = LayoutInflater.from(parent.context)
-        if (viewType == 0) {
-            val v = inflater.inflate(R.layout.translation_language_item_header, parent, false)
-            return HeaderHolder(v)
+    private val items: List<Item> = buildList {
+        addAll(pinned.map(Item::Language))
+        if (recent.isNotEmpty()) {
+            add(Item.RecentHeader)
+            addAll(recent.map(Item::Language))
         }
-        val v = inflater.inflate(R.layout.translation_language_item, parent, false)
+        add(Item.Divider)
+        addAll(remaining.map(Item::Language))
+    }
+
+    override fun getItemCount(): Int = items.size
+
+    override fun getItemViewType(position: Int): Int = when (items[position]) {
+        is Item.Language -> TYPE_LANGUAGE
+        Item.RecentHeader -> TYPE_HEADER
+        Item.Divider -> TYPE_DIVIDER
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        val inflater = LayoutInflater.from(parent.context)
+        if (viewType == TYPE_HEADER) {
+            return HeaderHolder(inflater.inflate(R.layout.translation_language_item_header, parent, false))
+        }
+        if (viewType == TYPE_DIVIDER) {
+            val divider = View(parent.context).apply {
+                layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                    resources.displayMetrics.density.coerceAtLeast(1f).toInt())
+            }
+            return DividerHolder(divider)
+        }
+        val view = inflater.inflate(R.layout.translation_language_item, parent, false)
         helium314.keyboard.latin.settings.Settings.getValues()?.mColors?.let { colors ->
             val keyText = colors.get(helium314.keyboard.latin.common.ColorType.KEY_TEXT)
-            v.findViewById<TextView>(R.id.language_name).setTextColor(keyText)
-            v.findViewById<android.widget.RadioButton>(R.id.language_radio).buttonTintList =
+            view.findViewById<TextView>(R.id.language_name).setTextColor(keyText)
+            view.findViewById<android.widget.RadioButton>(R.id.language_radio).buttonTintList =
                 android.content.res.ColorStateList.valueOf(keyText)
         }
-        return RowHolder(v)
+        return RowHolder(view)
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-        if (holder is RowHolder) {
-            val language = if (hasHeader) all[position - 1] else all[position]
-            holder.name.text = language.name
-            holder.radio.isChecked = language.code == selected.code
-            holder.root.setOnClickListener { onPick(language) }
-        } else if (holder is HeaderHolder && holder.itemView is TextView) {
-            helium314.keyboard.latin.settings.Settings.getValues()?.mColors?.let { colors ->
-                (holder.itemView as TextView).setTextColor(colors.get(helium314.keyboard.latin.common.ColorType.KEY_TEXT))
+        when (holder) {
+            is RowHolder -> {
+                val language = (items[position] as Item.Language).value
+                holder.name.text = language.name
+                holder.radio.isChecked = language.code == selected.code
+                holder.root.setOnClickListener { onPick(language) }
+            }
+            is HeaderHolder -> helium314.keyboard.latin.settings.Settings.getValues()?.mColors?.let { colors ->
+                (holder.itemView as TextView).setTextColor(
+                    colors.get(helium314.keyboard.latin.common.ColorType.KEY_TEXT))
+            }
+            is DividerHolder -> helium314.keyboard.latin.settings.Settings.getValues()?.mColors?.let { colors ->
+                holder.itemView.setBackgroundColor(
+                    colors.get(helium314.keyboard.latin.common.ColorType.KEY_TEXT))
+                holder.itemView.alpha = 0.2f
             }
         }
     }
 
-    /** Desh FastScrollerView b(): the bubble letter for a list position, or null when
-     *  the row is outside the recent region (Desh: viewType == 0 && pos < k + 1). */
-    fun letterForPosition(position: Int): String? {
-        if (position < 0 || position >= itemCount) return null
-        if (hasHeader) {
-            // recent region: native/English + used rows (Desh d.size + e.size, +1 offset)
-            if (position < 1 || position > used.size + 1) return null
-            return firstLetter(all[position - 1])
-        }
-        // no recent: Desh pins [native, English] at the top (d = a.b())
-        if (position > 1) return null
-        return firstLetter(all[position])
-    }
+    fun letterForPosition(position: Int): String? =
+        ((items.getOrNull(position) as? Item.Language)?.value?.name?.firstOrNull())
+            ?.uppercaseChar()?.toString()
 
-    private fun firstLetter(language: DeshTranslationLanguage): String? {
-        val c = language.name.firstOrNull() ?: return null
-        return c.uppercaseChar().toString()
-    }
-
-    private class HeaderHolder(view: android.view.View) : RecyclerView.ViewHolder(view)
-    private class RowHolder(view: android.view.View) : RecyclerView.ViewHolder(view) {
-        val root: android.view.View = view
+    private class HeaderHolder(view: View) : RecyclerView.ViewHolder(view)
+    private class DividerHolder(view: View) : RecyclerView.ViewHolder(view)
+    private class RowHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val root: View = view
         val radio: android.widget.RadioButton = view.findViewById(R.id.language_radio)
         val name: TextView = view.findViewById(R.id.language_name)
+    }
+
+    private companion object {
+        const val TYPE_LANGUAGE = 0
+        const val TYPE_DIVIDER = 1
+        const val TYPE_HEADER = 2
     }
 }

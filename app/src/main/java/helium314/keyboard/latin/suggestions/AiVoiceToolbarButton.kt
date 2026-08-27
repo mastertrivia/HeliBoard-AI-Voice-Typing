@@ -12,6 +12,9 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import androidx.annotation.ColorInt
 import helium314.keyboard.latin.R
+import helium314.keyboard.latin.aivoice.runtime.AiVoiceRecordingState
+import helium314.keyboard.latin.common.ColorType
+import helium314.keyboard.latin.common.Colors
 import java.util.Locale
 
 /** Toolbar key with a fixed AI microphone icon and a compact state label. */
@@ -58,56 +61,48 @@ class AiVoiceToolbarButton @JvmOverloads constructor(
         invalidate()
     }
 
-    fun setVisualState(recording: Boolean, processing: Boolean, retry: Boolean, elapsedMillis: Long) {
-        val nextState = when {
-            retry -> VisualState.RETRY
-            processing -> VisualState.PROCESSING
-            recording -> VisualState.RECORDING
-            else -> VisualState.IDLE
+    /** Rebinds the current theme and visual on every runtime update so drawable tint cannot leak. */
+    fun setVisualState(state: AiVoiceRecordingState, elapsedMillis: Long, colors: Colors) {
+        val nextState = when (state) {
+            AiVoiceRecordingState.IDLE -> VisualState.IDLE
+            AiVoiceRecordingState.STARTING, AiVoiceRecordingState.PAUSED, AiVoiceRecordingState.STOPPING -> VisualState.PROCESSING
+            AiVoiceRecordingState.RECORDING -> VisualState.RECORDING
         }
-        val stateChanged = visualState != nextState
         visualState = nextState
         this.elapsedMillis = elapsedMillis.coerceAtLeast(0L)
-        if (stateChanged) {
-            when (nextState) {
-                VisualState.IDLE -> {
-                    loaderAnimator.cancel()
-                    setImageResource(R.drawable.sym_keyboard_ai_voice)
-                    isEnabled = true
-                    contentDescription = context.getString(R.string.ai_voice_toolbar_start)
-                }
-                VisualState.RECORDING -> {
-                    loaderAnimator.cancel()
-                    setImageResource(R.drawable.sym_keyboard_ai_voice_recording)
-                    drawable?.setTint(RECORDING_TINT)
-                    isEnabled = true
-                    contentDescription = context.getString(R.string.ai_voice_toolbar_stop)
-                }
-                VisualState.PROCESSING -> {
-                    setImageDrawable(null)
-                    isEnabled = false
-                    contentDescription = context.getString(R.string.ai_voice_toolbar_processing)
-                    loaderAnimator.start()
-                }
-                VisualState.RETRY -> {
-                    loaderAnimator.cancel()
-                    setImageResource(R.drawable.sym_keyboard_ai_voice_retry)
-                    drawable?.setTint(labelColor)
-                    isEnabled = true
-                    contentDescription = context.getString(R.string.ai_voice_toolbar_retry)
-                }
+        setLabelColor(colors.get(ColorType.TOOL_BAR_KEY))
+        colors.setBackground(this, ColorType.STRIP_BACKGROUND)
+        when (nextState) {
+            VisualState.IDLE -> {
+                loaderAnimator.cancel()
+                setImageResource(R.drawable.sym_keyboard_ai_voice)
+                colors.setColor(this, ColorType.TOOL_BAR_KEY)
+                isEnabled = true
+                contentDescription = context.getString(R.string.ai_voice_toolbar_start)
+            }
+            VisualState.RECORDING -> {
+                loaderAnimator.cancel()
+                setImageResource(R.drawable.sym_keyboard_ai_voice_recording)
+                colors.setColor(this, ColorType.TOOL_BAR_KEY)
+                drawable?.setTint(RECORDING_TINT)
+                isEnabled = true
+                contentDescription = context.getString(R.string.ai_voice_toolbar_stop)
+            }
+            VisualState.PROCESSING -> {
+                setImageDrawable(null)
+                isEnabled = false
+                contentDescription = context.getString(R.string.ai_voice_toolbar_processing)
+                if (!loaderAnimator.isStarted) loaderAnimator.start()
             }
         }
         invalidate()
     }
 
-    fun isShowingRetry(): Boolean = visualState == VisualState.RETRY
-
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         labelPaint.color = labelColor
         when (visualState) {
-            VisualState.IDLE, VisualState.RECORDING, VisualState.RETRY -> {
+            VisualState.IDLE, VisualState.RECORDING -> {
                 val label = if (visualState == VisualState.RECORDING) {
                     formatElapsed(elapsedMillis)
                 } else {
@@ -153,7 +148,7 @@ class AiVoiceToolbarButton @JvmOverloads constructor(
         return String.format(Locale.ROOT, "%02d:%02d", seconds / 60L, seconds % 60L)
     }
 
-    private enum class VisualState { IDLE, RECORDING, PROCESSING, RETRY }
+    private enum class VisualState { IDLE, RECORDING, PROCESSING }
 
     private companion object {
         const val LOADER_ROTATION_DURATION_MILLIS = 900L

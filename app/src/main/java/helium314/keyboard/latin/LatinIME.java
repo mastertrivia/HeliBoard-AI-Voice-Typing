@@ -72,6 +72,7 @@ import helium314.keyboard.latin.settings.SettingsValues;
 import helium314.keyboard.latin.suggestions.SuggestionStripView;
 import helium314.keyboard.latin.suggestions.SuggestionStripViewAccessor;
 import helium314.keyboard.voice.SpeechNotesVoiceEngine;
+import helium314.keyboard.voice.SpeechNotesVoiceEngine.VoiceUiState;
 import helium314.keyboard.voice.VoiceSounds;
 import helium314.keyboard.latin.translation.DeshKeyboardEditText;
 import helium314.keyboard.latin.translation.DeshTranslationEngine;
@@ -165,8 +166,8 @@ public class LatinIME extends InputMethodService implements
     @Nullable
     private SpeechNotesVoiceEngine mVoiceEngine;
 
-    /** Previous voice listening state, so the start/stop sounds fire once per actual transition. */
-    private boolean mVoiceListeningSoundState;
+    /** Whether the active Speech Notes user session has already played its start tone. */
+    private boolean mVoiceStartTonePlayed;
 
     /** Isolated Desh Hindi composer — owns key->composition->commit for desh_hindi only. */
     private DeshHindiComposer mDeshHindiComposer;
@@ -987,23 +988,24 @@ public class LatinIME extends InputMethodService implements
     }
 
     /**
-     * Called by the ported Speech Notes engine whenever the listening state
-     * changes (onListening/onConnecting/onAboutToReconnect -> true, stop -> false).
-     * Drives the animated three-bar indicator on every VOICE toolbar key — both
-     * the expanded-toolbar instance and the pinned copy.
+     * Applies the Speech Notes phase to both Voice toolbar copies. CONNECTING and
+     * RESTARTING acknowledge the tap with a static mic; each READY callback restores
+     * bars, while the engine separately marks first-ready sound eligibility.
      */
-    public void onVoiceEngineListeningStateChanged(boolean listening) {
+    public void onVoiceEngineStateChanged(VoiceUiState state, boolean playStartTone,
+            boolean playStopTone) {
         if (mSuggestionStripView != null)
-            mSuggestionStripView.setVoiceListening(listening);
-        // Play the start/stop indicator tones only on the real listening-state
-        // transitions (not on the mic tap, and not on internal recognition restarts,
-        // which keep the state true). The engine state is the source of truth.
-        if (listening && !mVoiceListeningSoundState) {
+            mSuggestionStripView.setVoiceState(state);
+        if (playStartTone && !mVoiceStartTonePlayed) {
             VoiceSounds.playListeningStart();
-        } else if (!listening && mVoiceListeningSoundState) {
-            VoiceSounds.playListeningStop();
+            mVoiceStartTonePlayed = true;
         }
-        mVoiceListeningSoundState = listening;
+        if (state == VoiceUiState.IDLE) {
+            if (playStopTone) {
+                VoiceSounds.playListeningStop();
+            }
+            mVoiceStartTonePlayed = false;
+        }
     }
 
     @Override
@@ -1312,6 +1314,7 @@ public class LatinIME extends InputMethodService implements
 
     @Override
     public void onWindowHidden() {
+        stopVoiceForInactiveIme();
         super.onWindowHidden();
         Log.i(TAG, "onWindowHidden");
         final MainKeyboardView mainKeyboardView = mKeyboardSwitcher.getMainKeyboardView();
@@ -1322,8 +1325,7 @@ public class LatinIME extends InputMethodService implements
     }
 
     void onFinishInputInternal() {
-        if (mAiVoiceSessionController != null)
-            mAiVoiceSessionController.onInputConnectionLost();
+        stopVoiceForInactiveIme();
         super.onFinishInput();
         Log.i(TAG, "onFinishInput");
 
@@ -1335,6 +1337,7 @@ public class LatinIME extends InputMethodService implements
     }
 
     void onFinishInputViewInternal(final boolean finishingInput) {
+        stopVoiceForInactiveIme();
         super.onFinishInputView(finishingInput);
         Log.i(TAG, "onFinishInputView");
         cleanupInternalStateForFinishInput();
@@ -1446,6 +1449,7 @@ public class LatinIME extends InputMethodService implements
 
     @Override
     public void requestHideSelf(int flags) {
+        stopVoiceForInactiveIme();
         super.requestHideSelf(flags);
         Log.i(TAG, "requestHideSelf: " + flags);
     }
@@ -1715,6 +1719,28 @@ public class LatinIME extends InputMethodService implements
         mSubtypeState.switchSubtype(mRichImm);
     }
 
+    /**
+     * Ends normal dictation for actual text entry or editing, while deliberately ignoring
+     * toolbar, layout, modifier, cursor, and other internal non-text events. stopListening()
+     * commits any outstanding provisional voice composition through the engine's stop policy.
+     */
+    private void stopNormalVoiceForKeyboardInput(final int codePoint, final int keyCode) {
+        if (mVoiceEngine == null || !mVoiceEngine.isListening()) {
+            return;
+        }
+        if (codePoint > 0 || keyCode == KeyCode.DELETE || keyCode == KeyEvent.KEYCODE_DEL
+                // Enter can be a functional key with no text code point (notably Shift+Enter
+                // and some hardware layouts), but it still submits or inserts a line.
+                || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyCode.SHIFT_ENTER) {
+            mVoiceEngine.stop();
+        }
+    }
+
+    /** Called at the accepted hardware-key boundary before InputLogic mutates the editor. */
+    public void onNormalVoiceHardwareKeyInput(final int codePoint, final int keyCode) {
+        stopNormalVoiceForKeyboardInput(codePoint, keyCode);
+    }
+
     // Implementation of {@link SuggestionStripView.Listener}.
     @Override
     public void onCodeInput(final int codePoint, final int x, final int y, final boolean isKeyRepeat) {
@@ -1747,6 +1773,7 @@ public class LatinIME extends InputMethodService implements
             return;
         }
         if (KeyCode.AI_VOICE_INPUT == event.getKeyCode()) {
+            stopNormalVoiceForVoiceOwnerChange();
             if (mAiVoiceSessionController != null)
                 mAiVoiceSessionController.onToolbarToggleRequested();
             return;
@@ -1765,6 +1792,7 @@ public class LatinIME extends InputMethodService implements
                 mVoiceEngine.startOrPause();
             return;
         }
+        stopNormalVoiceForKeyboardInput(event.getCodePoint(), event.getKeyCode());
         // Isolated Desh Hindi input layer: desh_hindi owns key->composition->commit
         // here; the composer falls back to plain insertion whenever anything is off.
         // Disabled while continuous Voice is listening so the voice engine's own
@@ -1777,14 +1805,8 @@ public class LatinIME extends InputMethodService implements
             updateDeshHindiVowelDiacriticMode(true);
             return;
         }
-        // Typing and editing while the mic is on go through the normal input
-        // pipeline untouched — the engine is a passive dictation writer and
-        // never sees typed text (same as the reference app).
-        // Normal keyboard interaction MUST NOT stop continuous Voice.
-        // The reference continuous-dictation behavior keeps the microphone/
-        // recognition session active while the user touches/uses the keyboard.
-        // Voice stops only through the explicit Voice key toggle or when the
-        // IME input view is finished/collapsed (onFinishInputView/onFinishInput).
+        // After the normal-voice stop boundary above, ordinary InputLogic owns
+        // the actual keyboard edit.
         final InputTransaction completeInputTransaction =
                 mInputLogic.onCodeInput(mSettings.getCurrent(), event,
                         mKeyboardSwitcher.getKeyboardCapsMode(),
@@ -1822,6 +1844,8 @@ public class LatinIME extends InputMethodService implements
 
     public void onTextInput(@Nullable String rawText) {
         if (rawText == null) return;
+        if (!rawText.isEmpty())
+            stopNormalVoiceForKeyboardInput(1, KeyCode.MULTIPLE_CODE_POINTS);
         // Multi-codepoint text (conjunct keys, emoji) also belongs in the translation
         // box while the panel is open.
         if (mDeshTranslationView != null && mDeshTranslationView.isOpen()
@@ -1848,8 +1872,29 @@ public class LatinIME extends InputMethodService implements
 
     @Override
     public void onAiVoiceToggleRequested() {
+        stopNormalVoiceForVoiceOwnerChange();
         if (mAiVoiceSessionController != null)
             mAiVoiceSessionController.onToolbarToggleRequested();
+    }
+
+    /** Voice-only ownership boundary; do not use this for ordinary toolbar actions. */
+    private void stopNormalVoiceForVoiceOwnerChange() {
+        if (mVoiceEngine != null)
+            mVoiceEngine.stopIfListening();
+    }
+
+    /** Called immediately before normal SpeechRecognizer capture starts. */
+    public void stopAiVoiceForNormalVoiceStart() {
+        if (mAiVoiceSessionController != null)
+            mAiVoiceSessionController.onCompetingVoiceStart();
+    }
+
+    /** Both voice systems must stop once the IME no longer has an active input surface/editor. */
+    private void stopVoiceForInactiveIme() {
+        if (mVoiceEngine != null)
+            mVoiceEngine.stopIfListening();
+        if (mAiVoiceSessionController != null)
+            mAiVoiceSessionController.onInputConnectionLost();
     }
 
     /** Called only by interaction paths which bypass the ordinary onEvent/onTextInput pipeline. */

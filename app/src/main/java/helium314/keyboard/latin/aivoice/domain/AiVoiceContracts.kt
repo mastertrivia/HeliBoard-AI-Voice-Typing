@@ -20,6 +20,8 @@ data class NewProfileDraft(
     val displayName: String,
     val providerId: String,
     val modelId: String,
+    val mode: VoiceMode = VoiceMode.RECORDING,
+    val liveBackendBaseUrl: String? = null,
     val providerOptions: Map<String, String> = emptyMap(),
 )
 
@@ -35,4 +37,6 @@ interface ProviderCatalog {
     fun provider(providerId: String): ProviderDescriptor?
     fun supports(providerId: String, modelId: String): Boolean =
         provider(providerId)?.models?.any { it.id == modelId } == true
+    fun supports(providerId: String, modelId: String, mode: VoiceMode): Boolean =
+        provider(providerId)?.models?.any { it.id == modelId && mode in it.supportedModes } == true
 }

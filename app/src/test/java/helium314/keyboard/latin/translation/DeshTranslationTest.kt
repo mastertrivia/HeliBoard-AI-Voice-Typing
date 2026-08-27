@@ -42,6 +42,8 @@ class DeshTranslationTest {
     @Before
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<App>()
+        context.getSharedPreferences("desh_translation", android.content.Context.MODE_PRIVATE)
+            .edit().clear().commit()
         editor = FakeInputConnection()
         val host = object : DeshTranslationHost {
             override fun getInputConnection(): InputConnection = editor
@@ -218,6 +220,37 @@ class DeshTranslationTest {
         assertTrue(engine.source.code != engine.target.code)
     }
 
+    @Test
+    fun `mandatory Hindi to English request has exact reference parameters`() {
+        val url = engine.buildUrl("नमस्ते दुनिया", "hi", "en")
+        assertTrue(url.startsWith("https://translate.googleapis.com/translate_a/t?"))
+        assertTrue(url.contains("client=gtx"))
+        assertTrue(url.contains("sl=hi"))
+        assertTrue(url.contains("tl=en"))
+        assertTrue(url.contains("q=%E0%A4%A8%E0%A4%AE%E0%A4%B8%E0%A5%8D%E0%A4%A4%E0%A5%87+%E0%A4%A6%E0%A5%81%E0%A4%A8%E0%A4%BF%E0%A4%AF%E0%A4%BE"))
+    }
+
+    @Test
+    fun `mandatory English to Hindi request has exact reference parameters`() {
+        val url = engine.buildUrl("hello world", "en", "hi")
+        assertTrue(url.startsWith("https://translate.googleapis.com/translate_a/t?"))
+        assertTrue(url.contains("client=gtx"))
+        assertTrue(url.contains("sl=en"))
+        assertTrue(url.contains("tl=hi"))
+        assertTrue(url.contains("q=hello+world"))
+    }
+
+    @Test
+    fun `show is idempotent while translation panel is already open`() {
+        sessionStarted = false
+        engine.show()
+        assertTrue(sessionStarted)
+        sessionStarted = false
+        engine.show()
+        assertFalse(sessionStarted)
+        assertEquals(View.VISIBLE, view.visibility)
+    }
+
     // ------------------------------------------------------------------
     // Input session — Desh bg/g.p0 (box InputConnection + host state swap)
     // ------------------------------------------------------------------
@@ -272,6 +305,35 @@ class DeshTranslationTest {
     }
 
     @Test
+    fun `MRU removes duplicate moves selection to front and caps at four`() {
+        val updated = DeshTranslationEngine.updateMru(
+            listOf("de", "fr", "es", "it", "fr"), "fr")
+        assertEquals(listOf("fr", "de", "es", "it"), updated)
+    }
+
+    @Test
+    fun `legacy pipe and reference JSON recent values parse robustly`() {
+        assertEquals(listOf("fr", "de", "es"),
+            DeshTranslationEngine.parseUsedLanguages("fr|de||fr|es"))
+        assertEquals(listOf("it", "fr"),
+            DeshTranslationEngine.parseUsedLanguages("[\"it\",\"fr\",\"it\"]"))
+        assertEquals(emptyList<String>(), DeshTranslationEngine.parseUsedLanguages("not-json"))
+    }
+
+    @Test
+    fun `picker pins Hindi and English then excludes them and recents from remaining`() {
+        val sections = engine.pickerSections(listOf("fr", "hi", "de", "en", "fr"))
+        assertEquals(listOf("hi", "en"), sections.pinned.map { it.code })
+        assertEquals(listOf("fr", "de"), sections.recent.map { it.code })
+        val remaining = sections.remaining.map { it.code }
+        assertFalse("hi" in remaining)
+        assertFalse("en" in remaining)
+        assertFalse("fr" in remaining)
+        assertFalse("de" in remaining)
+        assertEquals(remaining.size, remaining.distinct().size)
+    }
+
+    @Test
     fun `keyboard switch is requested when the source language changes`() {
         var requestedCode: String? = null
         val host = object : DeshTranslationHost {
@@ -296,6 +358,31 @@ class DeshTranslationTest {
             ?: DeshTranslationLanguage.ENGLISH
         engineWithHost.onLanguageSelected(french, isSource = true)
         assertEquals("fr", requestedCode)
+    }
+
+    @Test
+    fun `target selection does not request keyboard switch`() {
+        var requestedCode: String? = null
+        val host = object : DeshTranslationHost {
+            override fun getInputConnection(): InputConnection = editor
+            override fun inputViewWindowToken(): IBinder? = null
+            override fun currentLanguageCode(): String = "hi"
+            override fun onTranslationVisibilityChanged(visible: Boolean) {}
+            override fun onTranslationSessionStart() {}
+            override fun onTranslationSessionEnd() {}
+            override fun onTranslationSelectionChanged(oldStart: Int, oldEnd: Int, newStart: Int, newEnd: Int) {}
+            override fun onTranslationTextChanged() {}
+            override fun onTranslationSourceLanguageChanged(sourceCode: String) { requestedCode = sourceCode }
+        }
+        val context = ApplicationProvider.getApplicationContext<App>()
+        val engineWithHost = DeshTranslationEngine(context, host)
+        val v = DeshTranslationView(context)
+        v.engine = engineWithHost
+        engineWithHost.view = v
+        engineWithHost.show()
+        engineWithHost.onLanguageSelected(
+            DeshTranslationLanguage.TABLE.first { it.code == "fr" }, isSource = false)
+        assertEquals(null, requestedCode)
     }
 
     @Test

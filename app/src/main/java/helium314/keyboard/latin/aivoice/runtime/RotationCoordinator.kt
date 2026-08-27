@@ -44,16 +44,16 @@ interface RotationCoordinator {
 }
 
 /**
- * Serialized, provider-neutral ring coordinator. Profile eligibility is limited to durable
- * metadata, installed provider implementations, and key availability. API keys remain behind
- * the resolver and are never returned to this coordinator.
+ * Serialized, provider-neutral ring coordinator. A shared mode-aware preflight supplies profile
+ * eligibility without returning Recording keys or Live credentials to this coordinator.
  */
 class DefaultRotationCoordinator(
     private val repository: AiVoiceSettingsRepository,
-    private val catalog: ProviderCatalog,
-    private val isProviderInstalled: (String) -> Boolean,
-    private val isProfileUsable: suspend (ApiProfile) -> Boolean,
+    private val catalog: ProviderCatalog? = null,
+    private val isProviderInstalled: (String) -> Boolean = { true },
+    private val isProfileUsable: suspend (ApiProfile) -> Boolean = { false },
     private val diagnostics: AiDiagnosticsSink,
+    private val isProfileEligible: (suspend (ApiProfile) -> Boolean)? = null,
 ) : RotationCoordinator {
     private val mutex = Mutex()
     /** In-memory trace of the failure class that queued each profile, for the later disable log. Never persisted. */
@@ -61,14 +61,10 @@ class DefaultRotationCoordinator(
 
     override suspend fun resolveProfileForNewSession(nowWallMillis: Long, nowElapsedMillis: Long): ApiProfile? = try {
         mutex.withLock {
-        // Key checks are performed before the atomic configuration mutation. The resulting ID
-        // set is used only for this boundary decision; no secret is retained in rotation state.
+        // Mode-aware checks run before the atomic mutation. No credential or token is retained.
         val usableProfileIds = mutableSetOf<String>()
         for (profile in repository.config.value.profiles) {
-            if (catalog.supports(profile.providerId, profile.modelId) &&
-                isProviderInstalled(profile.providerId) && isProfileUsable(profile)) {
-                usableProfileIds += profile.id
-            }
+            if (profileIsEligible(profile)) usableProfileIds += profile.id
         }
         var result: ApiProfile? = null
         repository.update("resolve_rotation_for_new_session") { config ->
@@ -87,8 +83,18 @@ class DefaultRotationCoordinator(
                     config.copy(activeProfileId = pendingManual.id, pendingProfileId = null,
                         rotation = resetForNewActiveProfile(config.rotation, nowWallMillis, nowElapsedMillis))
                 }
-                active == null || !eligible(active, usableProfileIds) -> {
+                active == null -> {
                     result = firstEligible(config, usableProfileIds)
+                    if (result == null) {
+                        emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.ERROR, code = "AI-0703", message = "No eligible AI Voice profile is available", reason = "cause=no enabled, supported, installed profile"))
+                        config
+                    } else {
+                        config.copy(activeProfileId = result!!.id,
+                            rotation = resetForNewActiveProfile(config.rotation, nowWallMillis, nowElapsedMillis))
+                    }
+                }
+                !eligible(active, usableProfileIds) -> {
+                    result = firstEligible(config, usableProfileIds, active)
                     if (result == null) {
                         emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.ERROR, code = "AI-0703", message = "No eligible AI Voice profile is available", reason = "cause=no enabled, supported, installed profile"))
                         config
@@ -109,7 +115,7 @@ class DefaultRotationCoordinator(
         emitSafely(AiDiagnosticEvent(level = DiagnosticLevel.ERROR, code = "AI-0708", message = "Rotation decision failed; current profile retained"))
         val active = repository.config.value.activeProfileId
             ?.let { id -> repository.config.value.profiles.firstOrNull { it.id == id } }
-        if (active != null && active.enabled && isProfileUsable(active)) active else null
+        if (active != null && profileIsEligible(active)) active else null
     }
 
     override suspend fun recordActiveDuration(profileId: String, activeMillis: Long) {
@@ -266,19 +272,18 @@ class DefaultRotationCoordinator(
         mutex.withLock {
             val usableProfileIds = mutableSetOf<String>()
             for (profile in repository.config.value.profiles) {
-                if (catalog.supports(profile.providerId, profile.modelId) &&
-                    isProviderInstalled(profile.providerId) && isProfileUsable(profile)) {
-                    usableProfileIds += profile.id
-                }
+                if (profileIsEligible(profile)) usableProfileIds += profile.id
             }
             val ordered = repository.config.value.profiles
             val start = ordered.indexOfFirst { it.id == fromProfileId }
             if (start < 0) return@withLock emptyList()
+            val sourceMode = ordered[start].mode
             buildList {
                 for (offset in 1..ordered.size) {
                     val candidate = ordered[(start + offset) % ordered.size]
                     if (candidate.id == fromProfileId) break
-                    if (candidate.id in usableProfileIds) add(candidate)
+                    // Same-audio WAV failover must never cross into the isolated Live pipeline.
+                    if (candidate.mode == sourceMode && candidate.id in usableProfileIds) add(candidate)
                 }
             }
         }
@@ -380,12 +385,18 @@ class DefaultRotationCoordinator(
         clockRotationAnchorElapsedRealtime = rotation.clockRotationAnchorElapsedRealtime ?: elapsed,
     )
 
-    private fun firstEligible(config: AiVoiceConfig, usableProfileIds: Set<String>) = config.profiles.firstOrNull { eligible(it, usableProfileIds) }
+    private suspend fun profileIsEligible(profile: ApiProfile): Boolean =
+        isProfileEligible?.invoke(profile)
+            ?: (catalog?.supports(profile.providerId, profile.modelId) == true &&
+                isProviderInstalled(profile.providerId) && isProfileUsable(profile))
+
+    private fun firstEligible(config: AiVoiceConfig, usableProfileIds: Set<String>, sameModeAs: ApiProfile? = null) =
+        config.profiles.firstOrNull { (sameModeAs == null || it.mode == sameModeAs.mode) && eligible(it, usableProfileIds) }
     private fun nextEligible(config: AiVoiceConfig, current: ApiProfile, usableProfileIds: Set<String>): ApiProfile? {
         val ordered = config.profiles
         if (ordered.size < 2) return null
         val start = ordered.indexOfFirst { it.id == current.id }
-        for (offset in 1 until ordered.size) ordered[(start + offset) % ordered.size].let { if (eligible(it, usableProfileIds)) return it }
+        for (offset in 1 until ordered.size) ordered[(start + offset) % ordered.size].let { if (it.mode == current.mode && eligible(it, usableProfileIds)) return it }
         return null
     }
     private fun eligible(profile: ApiProfile, usableProfileIds: Set<String>) = profile.enabled && profile.id in usableProfileIds

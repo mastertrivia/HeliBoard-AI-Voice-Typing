@@ -2,6 +2,7 @@
 package helium314.keyboard.latin.aivoice.provider
 
 import helium314.keyboard.latin.aivoice.domain.ProviderCatalog
+import helium314.keyboard.latin.aivoice.language.KeyboardLanguageBehavior
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -26,7 +27,6 @@ import java.net.UnknownHostException
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.coroutines.resumeWithException
-import java.util.Locale
 
 /** Groq implementation of [SpeechProvider]. It owns Groq request shape and no runtime/session state. */
 class GroqSpeechProvider(
@@ -102,14 +102,23 @@ class GroqSpeechProvider(
     }
 
     private fun buildRequest(request: TranscriptionRequest): Request {
+        val translateToEnglish = request.languageBehavior == KeyboardLanguageBehavior.ENGLISH_OUTPUT &&
+            request.profile.modelId == WHISPER_LARGE_V3
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("file", request.wavFile.name, request.wavFile.asRequestBody(WAV_MEDIA_TYPE))
             .addFormDataPart("model", request.profile.modelId)
             .addFormDataPart("response_format", "json")
-            .apply { request.languageTag?.let { addFormDataPart("language", it.lowercase(Locale.ROOT)) } }
+            .apply {
+                // Groq's translations operation is English-only. For transcription, language is an
+                // input-language hint, so only send Hindi when the Hindi keyboard is active. In
+                // particular, do not mislabel Hindi speech as English for Turbo, which has no
+                // provider-native translation operation.
+                if (translateToEnglish) addFormDataPart("language", "en")
+                else if (request.languageBehavior == KeyboardLanguageBehavior.HINDI_OUTPUT) addFormDataPart("language", "hi")
+            }
             .build()
         return Request.Builder()
-            .url(TRANSCRIPTIONS_URL)
+            .url(if (translateToEnglish) TRANSLATIONS_URL else TRANSCRIPTIONS_URL)
             .header("Authorization", "Bearer ${request.apiKey}")
             .post(body)
             .build()
@@ -191,6 +200,8 @@ class GroqSpeechProvider(
     private companion object {
         const val PROVIDER_ID = "groq"
         const val TRANSCRIPTIONS_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+        const val TRANSLATIONS_URL = "https://api.groq.com/openai/v1/audio/translations"
+        const val WHISPER_LARGE_V3 = "whisper-large-v3"
         const val RETRY_DELAY_MILLIS = 500L
         const val MAX_RESPONSE_CHARS = 1_048_576
         const val RESPONSE_READ_BUFFER_CHARS = 4_096

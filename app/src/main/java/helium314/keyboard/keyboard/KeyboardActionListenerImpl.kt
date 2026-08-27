@@ -92,6 +92,7 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
         }
 
         if (event.isHandled) {
+            latinIME.onNormalVoiceHardwareKeyInput(event.codePoint, event.keyCode)
             inputLogic.onCodeInput(
                 settings.current, event,
                 keyboardSwitcher.getKeyboardCapsMode(), // TODO: this is not necessarily correct for a hardware keyboard right now

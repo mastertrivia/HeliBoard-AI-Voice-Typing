@@ -5,6 +5,7 @@ import helium314.keyboard.latin.aivoice.domain.ApiKeyStore
 import helium314.keyboard.latin.aivoice.domain.ApiProfile
 import helium314.keyboard.latin.aivoice.domain.ProviderCatalog
 import helium314.keyboard.latin.aivoice.domain.AiVoiceSettingsRepository
+import helium314.keyboard.latin.aivoice.language.KeyboardLanguageBehavior
 import helium314.keyboard.latin.aivoice.diagnostics.AiDiagnosticEvent
 import helium314.keyboard.latin.aivoice.diagnostics.AiDiagnosticsSink
 import helium314.keyboard.latin.aivoice.diagnostics.DiagnosticLevel
@@ -15,7 +16,8 @@ data class TranscriptionRequest(
     val wavFile: File,
     val profile: ApiProfile,
     val apiKey: String,
-    val languageTag: String? = null,
+    val languageBehavior: KeyboardLanguageBehavior = KeyboardLanguageBehavior.UNSPECIFIED,
+    val languageTag: String? = languageBehavior.languageTag,
     val sessionId: String? = null,
     val chunkSequence: Long? = null,
 ) {

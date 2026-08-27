@@ -52,102 +52,98 @@ public class VoiceController implements RecognitionListener {
     private int rmsRepeatCount = 0;
     private float lastRms = 0.0f;
     private String pendingTypedChar = "";
+    /** Explicit recognizer lifecycle. isListening() remains the compatibility session flag. */
+    public enum RecognitionState { CONNECTING, READY, SPEAKING, RESTARTING, STOPPED }
+
+    private RecognitionState recognitionState = RecognitionState.STOPPED;
+    /** Monotonically increasing token invalidates callbacks/timers from old recognizers. */
+    private long sessionGeneration;
     private int uiState = 0;
     /** A stable segment was already committed this session. (was the note app's t flag) */
     private boolean stableTextProcessed;
 
-    /** 4000ms no-speech-error timer. (was b$a) */
-    class NoSpeechErrorTimer extends CountDownTimer {
-        NoSpeechErrorTimer(long j, long j2) {
-            super(j, j2);
-        }
-
-        @Override
-        public void onFinish() {
-            SmartLog.a("mTimerToNoSpeechError", "onFinish");
-            VoiceController.this.callback.onAboutToReconnect();
-            VoiceController.this.uiState = 1;
-            VoiceController.this.forceRestartTimer.start();
-        }
-
-        @Override
-        public void onTick(long j) {
-            SmartLog.a("mTimerToNoSpeechError", "onTick");
-        }
+    private boolean isCurrentGeneration(long generation) {
+        return listening && generation == sessionGeneration;
     }
 
-    /** 2000ms force-restart timer (API < 23). (was b$b) */
-    class ForceRestartTimerLegacy extends CountDownTimer {
-        public ForceRestartTimerLegacy() {
-            super(2000L, 2000L);
+    private void setState(RecognitionState state) {
+        recognitionState = state;
+    }
+
+    /** Listener bound to one recognizer generation; stale platform callbacks are ignored. */
+    private final class SessionRecognitionListener implements RecognitionListener {
+        private final long generation;
+
+        SessionRecognitionListener(long generation) {
+            this.generation = generation;
         }
 
-        @Override
-        public void onFinish() {
-            SmartLog.a("mTimerToForceRestart", "onFinish");
-            if (VoiceController.this.speechBegan) {
-                SmartLog.a("mTimerToForceRestart", "mHasSpeechBegan true");
+        private boolean current() { return isCurrentGeneration(generation); }
+        @Override public void onReadyForSpeech(Bundle params) { if (current()) VoiceController.this.onReadyForSpeech(params); }
+        @Override public void onBeginningOfSpeech() { if (current()) VoiceController.this.onBeginningOfSpeech(); }
+        @Override public void onRmsChanged(float rmsdB) { if (current()) VoiceController.this.onRmsChanged(rmsdB); }
+        @Override public void onBufferReceived(byte[] buffer) { if (current()) VoiceController.this.onBufferReceived(buffer); }
+        @Override public void onEndOfSpeech() { if (current()) VoiceController.this.onEndOfSpeech(); }
+        @Override public void onError(int error) { if (current()) VoiceController.this.onError(error); }
+        @Override public void onResults(Bundle results) { if (current()) VoiceController.this.onResults(results); }
+        @Override public void onPartialResults(Bundle partialResults) { if (current()) VoiceController.this.onPartialResults(partialResults); }
+        @Override public void onEvent(int eventType, Bundle params) { if (current()) VoiceController.this.onEvent(eventType, params); }
+    }
+
+    /** Timers bind their finish work to the recognizer generation that armed them. */
+    private void startNoSpeechTimer(final long generation) {
+        if (noSpeechTimer != null) noSpeechTimer.cancel();
+        noSpeechTimer = new CountDownTimer(4000L, 4000L) {
+            @Override public void onTick(long millisUntilFinished) { }
+            @Override public void onFinish() {
+                if (!isCurrentGeneration(generation)) return;
+                callback.onAboutToReconnect();
+                setState(RecognitionState.RESTARTING);
+                startForceRestartTimer(generation);
             }
-            VoiceController voiceController = VoiceController.this;
-            voiceController.destroyAndRestart(Boolean.valueOf(voiceController.listening));
-        }
-
-        @Override
-        public void onTick(long j) {
-        }
+        }.start();
     }
 
-    /** 900ms force-restart timer (API >= 23). (was b$c) */
-    class ForceRestartTimer extends CountDownTimer {
-        public ForceRestartTimer() {
-            super(900L, 900L);
-        }
-
-        @Override
-        public void onFinish() {
-            SmartLog.a("mTimerToForceRestart", "onFinish");
-            if (!VoiceController.this.speechBegan) {
-                VoiceController voiceController = VoiceController.this;
-                voiceController.restartListening(Boolean.valueOf(voiceController.listening));
-            } else {
-                SmartLog.a("mTimerToForceRestart", "mHasSpeechBegan true");
-                VoiceController voiceController2 = VoiceController.this;
-                voiceController2.destroyAndRestart(Boolean.valueOf(voiceController2.listening));
+    private void startForceRestartTimer(final long generation) {
+        if (forceRestartTimer != null) forceRestartTimer.cancel();
+        final long delay = Build.VERSION.SDK_INT >= 23 ? 900L : 2000L;
+        forceRestartTimer = new CountDownTimer(delay, delay) {
+            @Override public void onTick(long millisUntilFinished) { }
+            @Override public void onFinish() {
+                if (!isCurrentGeneration(generation)) return;
+                if (speechBegan || Build.VERSION.SDK_INT < 23) {
+                    destroyAndRestart(Boolean.TRUE);
+                } else {
+                    restartListening(Boolean.TRUE);
+                }
             }
-        }
-
-        @Override
-        public void onTick(long j) {
-        }
+        }.start();
     }
 
-    /** Connects to the recognizer: resolve service fresh if missing, then create + startListening immediately. (was b$d) */
+    /** Connects one generation to the recognizer. */
     private class ConnectToRecognizerRunnable implements Runnable {
-        RecognitionListener listener;
         Context context;
+        long generation;
 
-        public ConnectToRecognizerRunnable(Context context, RecognitionListener recognitionListener) {
+        public ConnectToRecognizerRunnable(Context context) {
             this.context = context;
-            this.listener = recognitionListener;
         }
 
-        // Matches the note app (k.c$e): no busy-wait — resolve the service fresh when
-        // missing, then immediately create/start the recognizer so listening begins at once.
+        void connect(long generation) {
+            this.generation = generation;
+            run();
+        }
+
+        // The explicit mic attempt has already refreshed the service; restarts retain
+        // that resolved service for the active voice session.
         @Override
         public void run() {
             SmartLog.a("ConnectToRecognizerRunnable", "run");
-            if (VoiceController.this.recognitionService == null || VoiceController.this.recognitionService.length() == 0
+            if (!VoiceController.this.isCurrentGeneration(generation)) return;
+            if (VoiceController.this.recognitionService.equals("no_service")
                     || VoiceController.this.recognitionService.equals("no_google_service")) {
-                VoiceController.this.recognitionService = VoiceController.this.resolveRecognitionService();
-                VoiceController.this.recognizer = null;
-            }
-            if (VoiceController.this.recognitionService.equals("no_service")) {
-                if (!SpeechRecognizer.isRecognitionAvailable(this.context)) {
-                    VoiceController.this.callback.onError(-2);
-                    return;
-                }
-                VoiceController.this.recognitionService = VoiceController.this.resolveRecognitionService();
-                VoiceController.this.recognizer = null;
+                VoiceController.this.callback.onError(-2);
+                return;
             }
             if (VoiceController.this.recognizer == null) {
                 ComponentName component = null;
@@ -158,8 +154,8 @@ public class VoiceController implements RecognitionListener {
                 }
                 VoiceController.this.recognitionComponent = component;
                 VoiceController.this.recognizer = SpeechRecognizer.createSpeechRecognizer(this.context, component);
-                VoiceController.this.recognizer.setRecognitionListener(this.listener);
             }
+            VoiceController.this.recognizer.setRecognitionListener(new SessionRecognitionListener(generation));
             try {
                 VoiceController.this.recognizer.startListening(VoiceController.this.recognitionIntent);
             } catch (Exception unused) {
@@ -172,7 +168,7 @@ public class VoiceController implements RecognitionListener {
         this.context = context;
         this.language = language;
         this.callback = callback;
-        this.connectRunnable = new ConnectToRecognizerRunnable(context, this);
+        this.connectRunnable = new ConnectToRecognizerRunnable(context);
         this.audioManager = (AudioManager) context.getSystemService("audio");
         this.muteAudio = muteAudio.booleanValue();
         SmartLog.b(false);
@@ -185,16 +181,7 @@ public class VoiceController implements RecognitionListener {
         this.recognitionIntent.putExtra("calling_package", this.context.getPackageName());
         this.recognitionIntent.putExtra("android.speech.extra.DICTATION_MODE", true);
         setLanguage(language);
-        String p = resolveRecognitionService();
-        this.recognitionService = p;
-        if (p.equals("no_google_service") || this.recognitionService.equals("no_service")) {
-            this.callback.onError(-1);
-        }
-        if (!this.recognitionService.equals("default") && !this.recognitionService.equals("no_google_service") && !this.recognitionService.equals("no_service")) {
-            recognitionComponent = ComponentName.unflattenFromString(this.recognitionService);
-        }
-        this.noSpeechTimer = new NoSpeechErrorTimer(4000L, 4000L);
-        this.forceRestartTimer = Build.VERSION.SDK_INT >= 23 ? new ForceRestartTimer() : new ForceRestartTimerLegacy();
+        // Service selection is intentionally deferred to each explicit microphone attempt.
     }
 
     /** Cancel both timers. (was A()) */
@@ -350,17 +337,18 @@ public class VoiceController implements RecognitionListener {
         return str;
     }
 
-    /** Restart listening: reset state, then reconnect + startListening. (was u(Boolean)) */
-    public void restartListening(Boolean bool) {
+    /** Start a new recognizer generation for this still-active voice session. */
+    public void restartListening(Boolean restart) {
         SmartLog.a(VoiceController.class.getName(), "restartListening");
+        if (!restart.booleanValue() || !this.listening) return;
+        cancelTimers();
         this.committedText = "";
         this.composingText = "";
+        this.pendingTypedChar = "";
         this.speechBegan = false;
         this.stableTextProcessed = false;
-        if (bool.booleanValue()) {
-            cancelTimers();
-            this.connectRunnable.run();
-        }
+        setState(RecognitionState.CONNECTING);
+        this.connectRunnable.connect(++this.sessionGeneration);
     }
 
     /** Destroy the recognizer; flush leftover composing text as a commit first. (was m()) */
@@ -386,11 +374,8 @@ public class VoiceController implements RecognitionListener {
     public void onBeginningOfSpeech() {
         SmartLog.a(VoiceController.class.getName(), "onBeginningOfSpeech");
         this.speechBegan = true;
+        setState(RecognitionState.SPEAKING);
         cancelTimers();
-        if (this.listening && this.uiState != 2) {
-            this.callback.onListening();
-            this.uiState = 2;
-        }
         this.lastCallback = "onBeginningOfSpeech";
     }
 
@@ -447,65 +432,55 @@ public class VoiceController implements RecognitionListener {
 
     @Override
     public void onPartialResults(Bundle bundle) {
-        SmartLog.a(VoiceController.class.getName(), "onPartialResults: " + bundle.getStringArrayList("results_recognition").get(0));
-        cancelTimers();
+        List<String> results = bundle.getStringArrayList("results_recognition");
+        if (results == null || results.isEmpty()) return;
+        String text = results.get(0);
+        SmartLog.a(VoiceController.class.getName(), "onPartialResults: " + text);
         this.speechBegan = true;
-        if (this.listening && this.uiState != 2) {
-            this.uiState = 2;
-            this.callback.onListening();
-        }
-        this.noSpeechTimer.start();
-        String str = bundle.getStringArrayList("results_recognition").get(0);
-        if (bundle.containsKey("android.speech.extra.UNSTABLE_TEXT") || this.stableTextProcessed) {
-            if (!this.normalizePunctuation) {
-                str = normalizePunctuation(str);
-            }
-            this.composingText = str;
-            this.callback.setComposingText(str);
-        } else {
-            Float valueOf = Float.valueOf(1.0f);
-            if (bundle.containsKey("confidence_scores")) {
-                valueOf = Float.valueOf(bundle.getFloatArray("confidence_scores")[0]);
-            }
-            this.committedText = str;
-            processStableText(str, valueOf.floatValue());
-        }
-        System.currentTimeMillis();
+        setState(RecognitionState.SPEAKING);
+        startNoSpeechTimer(this.sessionGeneration);
+        if (!this.normalizePunctuation) text = normalizePunctuation(text);
+        this.composingText = text;
+        this.callback.setComposingText(text);
         this.lastCallback = "onPartialResults";
     }
 
     @Override
     public void onReadyForSpeech(Bundle bundle) {
         SmartLog.a(VoiceController.class.getName(), "onReadyForSpeech");
+        setState(RecognitionState.READY);
+        // The indicator represents a recognizer that has actually accepted the request.
         this.callback.onListening();
         this.uiState = 2;
-        cancelTimers();
-        this.noSpeechTimer.start();
+        startNoSpeechTimer(this.sessionGeneration);
         this.lastCallback = "onReadyForSpeech";
         this.lastRms = 0.0f;
     }
 
     @Override
     public void onResults(Bundle bundle) {
-        SmartLog.a(VoiceController.class.getName(), "onResults: " + bundle.getStringArrayList("results_recognition").get(0));
+        List<String> results = bundle.getStringArrayList("results_recognition");
         cancelTimers();
-        // Match the note app: commit the final result even when no partial preceded it
-        // (single words often arrive without a partial). Skip only when a stable segment
-        // was already committed this session (stableTextProcessed).
-        if (!this.stableTextProcessed) {
-            bundle.getStringArrayList("results_recognition");
-            bundle.getFloatArray("confidence_scores");
-            String str = bundle.getStringArrayList("results_recognition").get(0);
-            float f = bundle.getFloatArray("confidence_scores")[0];
-            if (this.committedText.length() > 0) {
-                String[] split = str.split(this.committedText);
-                str = split.length > 0 ? split[split.length - 1] : "";
-            }
-            processStableText(str, f);
+        float confidence = 1.0f;
+        float[] confidences = bundle.getFloatArray("confidence_scores");
+        if (confidences != null && confidences.length > 0) confidence = confidences[0];
+        String finalText = results == null || results.isEmpty() ? null : results.get(0);
+        if (TextUtils.isEmpty(finalText)) {
+            // This callback is generation-guarded by SessionRecognitionListener. Preserve the
+            // current session's provisional editor text before restartListening clears it.
+            if (this.composingText.length() > 0) processStableText(this.composingText, confidence);
+            this.committedText = "";
+            this.lastCallback = "onResults";
+            restartListening(Boolean.valueOf(this.listening));
+            return;
         }
-        restartListening(Boolean.valueOf(this.listening));
+        SmartLog.a(VoiceController.class.getName(), "onResults: " + finalText);
+        // The editor currently holds composingText as provisional text; committing the final
+        // replaces it, so a non-empty final is committed exactly once rather than duplicated.
+        processStableText(finalText, confidence);
         this.committedText = "";
         this.lastCallback = "onResults";
+        restartListening(Boolean.valueOf(this.listening));
     }
 
     @Override
@@ -551,16 +526,30 @@ public class VoiceController implements RecognitionListener {
         }
     }
 
+    /** Resolve the selected service again for each user mic attempt. */
+    public synchronized boolean refreshRecognitionServiceAvailability() {
+        this.recognitionService = resolveRecognitionService();
+        this.recognitionComponent = null;
+        return !this.recognitionService.equals("no_google_service")
+                && !this.recognitionService.equals("no_service");
+    }
+
     /** Start listening. (was y()) */
-    public boolean startListening() {
+    public synchronized boolean startListening() {
         SmartLog.a(VoiceController.class.getName(), "startListening");
-        if (this.recognitionService.equals("no_google_service") || this.recognitionService.equals("no_service")) {
-            String p = resolveRecognitionService();
-            this.recognitionService = p;
-            if (p.equals("no_google_service") || this.recognitionService.equals("no_service")) {
-                this.callback.onError(-1);
-                return false;
+        if (this.listening) {
+            return true;
+        }
+        if (!refreshRecognitionServiceAvailability()) {
+            this.callback.onError(-1);
+            return false;
+        }
+        if (this.recognizer != null) {
+            try {
+                this.recognizer.destroy();
+            } catch (Exception ignored) {
             }
+            this.recognizer = null;
         }
         this.listening = true;
         this.speechBegan = false;
@@ -579,14 +568,25 @@ public class VoiceController implements RecognitionListener {
         return true;
     }
 
-    /** Stop listening (recognizer kept alive for reuse). (was z()) */
+    /** Stop listening and commit any provisional editor composition. (was z()) */
     public void stopListening() {
         SmartLog.a(VoiceController.class.getName(), "stopListening");
         this.listening = false;
+        ++this.sessionGeneration;
+        setState(RecognitionState.STOPPED);
         cancelTimers();
+        if (this.composingText.length() > 0) {
+            processStableText(this.composingText, 1.0f);
+        }
+        this.composingText = "";
+        this.committedText = "";
+        this.pendingTypedChar = "";
         SpeechRecognizer speechRecognizer = this.recognizer;
         if (speechRecognizer != null) {
-            speechRecognizer.stopListening();
+            try {
+                speechRecognizer.stopListening();
+            } catch (Exception ignored) {
+            }
         }
         AudioStreamHelper.restoreMusicVolume(this.audioManager, this.musicVolume);
         AudioStreamHelper.restoreSystemVolume(this.audioManager, this.systemVolume);

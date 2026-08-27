@@ -7,6 +7,12 @@ import helium314.keyboard.latin.aivoice.data.EncryptedPrefsApiKeyStore
 import helium314.keyboard.latin.aivoice.diagnostics.AiDiagnosticsRepository
 import helium314.keyboard.latin.aivoice.domain.BuiltInProviderCatalog
 import helium314.keyboard.latin.aivoice.language.HeliBoardKeyboardLanguageHint
+import helium314.keyboard.latin.aivoice.live.AndroidKeystoreInstallationSigner
+import helium314.keyboard.latin.aivoice.live.EnrolledInstallationTokenProvider
+import helium314.keyboard.latin.aivoice.live.GeminiLiveStreamingSpeechProvider
+import helium314.keyboard.latin.aivoice.live.OkHttpInstallationBackendTransport
+import helium314.keyboard.latin.aivoice.live.OkHttpLiveWebSocketFactory
+import helium314.keyboard.latin.aivoice.live.SharedPrefsInstallationStateStore
 import helium314.keyboard.latin.aivoice.provider.SpeechProviderRegistry
 import helium314.keyboard.latin.aivoice.provider.GroqSpeechProvider
 import helium314.keyboard.latin.aivoice.provider.GeminiSpeechProvider
@@ -37,19 +43,35 @@ class AiVoiceDependencies private constructor(context: Context) {
         GeminiSpeechProvider(httpClient, catalog),
     ))
     val providerResolver = ProviderResolver(catalog, apiKeyStore, providers, settingsRepository, diagnostics)
-    /** Future audio dispatcher uses this to snapshot the active HeliBoard subtype per request. */
-    val transcriptionRequestFactory = TranscriptionRequestFactory(HeliBoardKeyboardLanguageHint())
+    val liveTokenProvider = EnrolledInstallationTokenProvider(
+        transport = OkHttpInstallationBackendTransport(httpClient),
+        signer = AndroidKeystoreInstallationSigner(context.applicationContext),
+        stateStore = SharedPrefsInstallationStateStore(
+            context.applicationContext.getSharedPreferences(LIVE_ENROLLMENT_PREFS_NAME, Context.MODE_PRIVATE),
+        ),
+        nonce = {
+            val bytes = ByteArray(32).also(java.security.SecureRandom()::nextBytes)
+            android.util.Base64.encodeToString(bytes, android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING)
+        },
+    )
+    val liveStreamingProvider = GeminiLiveStreamingSpeechProvider(OkHttpLiveWebSocketFactory(httpClient))
+    val keyboardLanguageHint = HeliBoardKeyboardLanguageHint()
+    val transcriptionRequestFactory = TranscriptionRequestFactory(keyboardLanguageHint)
+    val profileEligibility = ProfileEligibility(
+        catalog = catalog,
+        providerResolver = providerResolver,
+        liveRuntimeAvailable = { true },
+    )
     val rotationCoordinator: RotationCoordinator = DefaultRotationCoordinator(
         repository = settingsRepository,
-        catalog = catalog,
-        isProviderInstalled = providers::isInstalled,
-        isProfileUsable = providerResolver::isProfileUsable,
+        isProfileEligible = profileEligibility::isEligible,
         diagnostics = diagnostics,
     )
     val runtimeState = AiVoiceRuntimeStateHolder()
 
     companion object {
         private const val PREFS_NAME = "ai_voice_engine"
+        private const val LIVE_ENROLLMENT_PREFS_NAME = "ai_voice_live_enrollment"
         @Volatile private var instance: AiVoiceDependencies? = null
 
         fun initialize(context: Context): AiVoiceDependencies = instance ?: synchronized(this) {

@@ -4,7 +4,9 @@ package helium314.keyboard.latin.aivoice.runtime
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.Build
 import android.os.SystemClock
+import kotlinx.coroutines.CompletableDeferred
 import java.io.File
 import java.io.RandomAccessFile
 import java.util.ArrayDeque
@@ -14,7 +16,8 @@ import kotlin.math.sqrt
 internal class AndroidAudioRecorder : AudioRecorder {
     override val format = PcmFormat()
     @Volatile private var audioRecord: AudioRecord? = null
-    @Volatile private var stopped = false
+    @Volatile private var stopRequested = false
+    @Volatile private var readFinished = CompletableDeferred<Unit>()
 
     override suspend fun initialize() {
         check(audioRecord == null) { "Audio recorder is already initialized" }
@@ -39,40 +42,54 @@ internal class AndroidAudioRecorder : AudioRecorder {
         audioRecord = record
     }
 
-    override suspend fun start(onFrame: suspend (AudioFrame) -> Unit) {
+    override suspend fun start() {
         val record = checkNotNull(audioRecord) { "Audio recorder is not initialized" }
-        stopped = false
+        stopRequested = false
+        readFinished = CompletableDeferred()
+        record.startRecording()
+        check(record.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "Microphone did not enter recording state" }
+    }
+
+    override suspend fun read(onFrame: suspend (AudioFrame) -> Unit) {
+        val record = checkNotNull(audioRecord) { "Audio recorder is not initialized" }
         try {
-            record.startRecording()
-            check(record.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "Microphone did not enter recording state" }
             val buffer = ByteArray(FRAME_BYTES)
-            while (!stopped) {
-                val read = record.read(buffer, 0, buffer.size)
+            while (true) {
+                val read = read(record, buffer)
                 if (read <= 0) {
-                    if (stopped) break
+                    if (stopRequested) break
                     throw IllegalStateException("AudioRecord read failed: $read")
                 }
                 onFrame(AudioFrame(buffer.copyOf(read), SystemClock.elapsedRealtime()))
+                if (stopRequested) break
             }
         } finally {
             runCatching { if (record.recordingState == AudioRecord.RECORDSTATE_RECORDING) record.stop() }
+            readFinished.complete(Unit)
         }
     }
 
     override suspend fun stop() {
-        stopped = true
-        audioRecord?.let { record ->
-            runCatching { if (record.recordingState == AudioRecord.RECORDSTATE_RECORDING) record.stop() }
-        }
+        stopRequested = true
+        // The read loop emits its current frame before observing this boundary, then stops AudioRecord.
+        readFinished.await()
     }
 
     override fun close() {
-        stopped = true
+        stopRequested = true
         audioRecord?.let { record ->
             runCatching { record.release() }
         }
+        readFinished.complete(Unit)
         audioRecord = null
     }
+
+    private fun read(record: AudioRecord, buffer: ByteArray): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            record.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
+        } else {
+            record.read(buffer, 0, buffer.size)
+        }
 
     private companion object {
         const val FRAME_BYTES = 3_200

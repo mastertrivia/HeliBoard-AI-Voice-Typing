@@ -8,6 +8,7 @@ import androidx.core.content.ContextCompat
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.aivoice.domain.ApiProfile
 import helium314.keyboard.latin.aivoice.domain.SessionPolicySnapshot
+import helium314.keyboard.latin.aivoice.domain.VoiceMode
 import helium314.keyboard.keyboard.KeyboardSwitcher
 import kotlinx.coroutines.CoroutineScope
 import java.io.File
@@ -29,47 +30,66 @@ object AiVoiceImeBridge {
             runtimeState = dependencies.runtimeState,
             diagnostics = dependencies.diagnostics,
             rotationCoordinator = dependencies.rotationCoordinator,
-            providerResolver = dependencies.providerResolver,
+            profileEligibility = dependencies.profileEligibility,
             hasMicrophonePermission = {
                 ContextCompat.checkSelfPermission(ime, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
             },
             createSession = { sessionId: String, profile: ApiProfile, policy: SessionPolicySnapshot, parentScope: CoroutineScope ->
                 val recorder = AndroidAudioRecorder()
-                val assembler = WavChunkAssembler(
-                    cacheRoot = chunkRoot,
-                    sessionId = sessionId,
-                    format = recorder.format,
-                    detector = RmsVoiceActivityDetector(),
-                    autoSendSilenceDurationMillis = policy.silenceDurationMillis,
-                    prolongedSilenceDurationMillis = policy.prolongedSilenceDurationMillis,
-                )
-                RecordingSession(
-                    id = sessionId,
-                    profile = profile,
-                    policy = policy,
-                    recorder = recorder,
-                    assembler = assembler,
-                    parentScope = parentScope,
-                    dispatcherFactory = { sessionScope, insertionGate ->
-                        SerialTranscriptionDispatcher(
+                when (profile.mode) {
+                    VoiceMode.LIVE -> GeminiLiveSession(
+                        sessionId = sessionId,
+                        profile = profile,
+                        diagnostics = dependencies.diagnostics,
+                        backendBaseUrl = checkNotNull(profile.liveBackendBaseUrl),
+                        tokenProvider = dependencies.liveTokenProvider,
+                        streamingProvider = dependencies.liveStreamingProvider,
+                        languageBehaviorProvider = { dependencies.transcriptionRequestFactory.currentBehavior() },
+                        recorder = recorder,
+                        composer = LatinImeLiveTranscriptComposer(ime),
+                        parentScope = parentScope,
+                        onMaximumDurationReached = { controller?.onMaximumDurationReached() },
+                        onCaptureFailure = { controller?.onPauseRequested() },
+                        recordingTimeoutMillis = policy.recordingTimeoutMillis,
+                    )
+                    VoiceMode.RECORDING -> {
+                        val assembler = WavChunkAssembler(
+                            cacheRoot = chunkRoot,
                             sessionId = sessionId,
-                            profile = profile,
-                            providerResolver = dependencies.providerResolver,
-                            requestFactory = dependencies.transcriptionRequestFactory,
-                            inserter = inserter,
-                            insertionGate = insertionGate,
-                            rotationCoordinator = dependencies.rotationCoordinator,
-                            diagnostics = dependencies.diagnostics,
-                            parentScope = sessionScope,
+                            format = recorder.format,
+                            detector = RmsVoiceActivityDetector(),
+                            autoSendSilenceDurationMillis = policy.silenceDurationMillis,
+                            prolongedSilenceDurationMillis = policy.prolongedSilenceDurationMillis,
                         )
-                    },
-                    onNonTerminalChunkSealed = { chunkStartedAtElapsedRealtime ->
-                        controller?.onNonTerminalChunkSealed(chunkStartedAtElapsedRealtime)
-                    },
-                    onSilenceTimeout = { controller?.onSilenceTimeout() },
-                    onMaximumDurationReached = { controller?.onMaximumDurationReached() },
-                    onCaptureFailure = { controller?.onPauseRequested() },
-                )
+                        RecordingSession(
+                            id = sessionId,
+                            profile = profile,
+                            policy = policy,
+                            recorder = recorder,
+                            assembler = assembler,
+                            parentScope = parentScope,
+                            dispatcherFactory = { sessionScope, insertionGate ->
+                                SerialTranscriptionDispatcher(
+                                    sessionId = sessionId,
+                                    profile = profile,
+                                    providerResolver = dependencies.providerResolver,
+                                    requestFactory = dependencies.transcriptionRequestFactory,
+                                    inserter = inserter,
+                                    insertionGate = insertionGate,
+                                    rotationCoordinator = dependencies.rotationCoordinator,
+                                    diagnostics = dependencies.diagnostics,
+                                    parentScope = sessionScope,
+                                )
+                            },
+                            onNonTerminalChunkSealed = { chunkStartedAtElapsedRealtime ->
+                                controller?.onNonTerminalChunkSealed(chunkStartedAtElapsedRealtime)
+                            },
+                            onSilenceTimeout = { controller?.onSilenceTimeout() },
+                            onMaximumDurationReached = { controller?.onMaximumDurationReached() },
+                            onCaptureFailure = { controller?.onPauseRequested() },
+                        )
+                    }
+                }
             },
             onManualProfileSelected = { profile ->
                 KeyboardSwitcher.getInstance().showToast(
